@@ -5,6 +5,7 @@
   --animate-scale-in: scale-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-float-slow: float-slow 9s ease-in-out infinite;
   --animate-float-slower: float-slow 13s ease-in-out infinite;
+  --animate-scan: scan 5s linear infinite;
 }
 
 @keyframes fade-in-up {
@@ -39,9 +40,18 @@
   }
 }
 
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
 body {
   margin: 0;
-  background-color: #05060d;
+  background-color: #050505;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -53,4 +63,31 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* Estètica "Grid" digital, coherent amb l'app d'escriptori LVCLITS. */
+.chamfer {
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+}
+.chamfer-sm {
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+.grid-bg-stream {
+  background-image: linear-gradient(rgba(251, 146, 60, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(251, 146, 60, 0.09) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.scanline {
+  position: relative;
+  overflow: hidden;
+}
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%);
+  animation: scan 5s linear infinite;
+  pointer-events: none;
 }

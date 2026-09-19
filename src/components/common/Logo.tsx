@@ -21,8 +21,7 @@ export default function Logo({ size = 48, className = "" }: LogoProps) {
       <defs>
         <linearGradient id="lvclits-shield" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#22d3ee" />
-          <stop offset="52%" stopColor="#818cf8" />
-          <stop offset="100%" stopColor="#f59e0b" />
+          <stop offset="100%" stopColor="#fb923c" />
         </linearGradient>
         <linearGradient id="lvclits-inner" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor="#0a0e1f" />
@@ -44,8 +43,8 @@ export default function Logo({ size = 48, className = "" }: LogoProps) {
         opacity="0.5"
       />
       <path d="M340 360 L340 620 L470 620" fill="none" stroke="#67e8f9" strokeWidth="46" strokeLinecap="square" />
-      <path d="M540 360 L660 640 L780 360" fill="none" stroke="#fbbf24" strokeWidth="46" strokeLinecap="square" />
-      <g stroke="#a78bfa" strokeWidth="6" fill="#a78bfa" opacity="0.85">
+      <path d="M540 360 L660 640 L780 360" fill="none" stroke="#fb923c" strokeWidth="46" strokeLinecap="square" />
+      <g stroke="#f97316" strokeWidth="6" fill="#f97316" opacity="0.85">
         <path d="M300 760 H420 L450 730 H574 L604 760 H724" fill="none" />
         <circle cx="300" cy="760" r="9" />
         <circle cx="724" cy="760" r="9" />

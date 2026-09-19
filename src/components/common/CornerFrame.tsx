@@ -1,10 +1,10 @@
 interface CornerFrameProps {
-  color?: "cyan" | "violet";
+  color?: "cyan" | "orange";
 }
 
 const COLOR_MAP: Record<string, string> = {
-  cyan: "border-cyan-400/50",
-  violet: "border-violet-400/50",
+  cyan: "border-cyan-400/70 shadow-[0_0_8px_rgba(34,211,238,0.6)]",
+  orange: "border-orange-400/70 shadow-[0_0_8px_rgba(251,146,60,0.6)]",
 };
 
 /**
@@ -15,7 +15,7 @@ const COLOR_MAP: Record<string, string> = {
  */
 export default function CornerFrame({ color = "cyan" }: CornerFrameProps) {
   const c = COLOR_MAP[color];
-  const base = "absolute w-4 h-4 border-t-2 border-l-2";
+  const base = "absolute w-5 h-5 border-t-2 border-l-2";
   return (
     <div className="absolute inset-0 pointer-events-none">
       <div className={`${base} ${c} top-0 left-0`} />

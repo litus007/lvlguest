@@ -101,7 +101,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0d0a1f] relative overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-black relative overflow-hidden flex flex-col">
       {/* Art de fons, la mateixa identitat "Compartir Joc" de l'app d'escriptori */}
       {!bgFailed ? (
         <img
@@ -111,9 +111,9 @@ export default function App() {
           className="absolute inset-0 w-full h-full object-cover opacity-60"
         />
       ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-violet-950 via-[#1a1030] to-[#0d0a1f]" />
+        <div className="absolute inset-0 bg-gradient-to-br from-orange-950 via-black to-black grid-bg-stream" />
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0d0a1f]/70 via-[#0d0a1f]/85 to-[#0d0a1f]" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/85 to-black" />
 
       {/* Barra de sistema */}
       <div className="relative z-10 flex items-center justify-between px-6 py-4 gap-3 flex-wrap">
@@ -136,13 +136,13 @@ export default function App() {
           {!installed && installEvent && (
             <button
               onClick={handleInstall}
-              className="text-[11px] font-bold uppercase tracking-widest text-violet-200 bg-violet-500/15 hover:bg-violet-500/25 border border-violet-400/30 rounded-full px-3.5 py-1.5 transition-colors duration-200"
+              className="text-[11px] font-bold uppercase tracking-widest text-orange-200 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-400/30 rounded-full px-3.5 py-1.5 transition-colors duration-200"
             >
               ⬇ Instal·lar app
             </button>
           )}
           <div className="flex items-center gap-1.5 text-[10px] text-gray-400 uppercase tracking-widest">
-            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
             Sistema 02 · Streaming
           </div>
         </div>
@@ -152,12 +152,12 @@ export default function App() {
         <div className="relative z-10 flex-1 flex items-center justify-center px-6">
           <div className="max-w-md w-full animate-fade-in-up">
             <div className="text-center mb-8">
-              <span className="text-violet-300/80 text-xs uppercase tracking-widest font-semibold">
+              <span className="text-orange-300/80 text-xs uppercase tracking-widest font-semibold">
                 🎮 Joc remot
               </span>
               <h1 className="text-4xl font-extrabold text-white tracking-tight mt-2">
                 Jugar en{" "}
-                <span className="bg-gradient-to-r from-violet-400 to-amber-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(167,139,250,0.3)]">
+                <span className="text-orange-400 drop-shadow-[0_0_20px_rgba(251,146,60,0.4)]">
                   remot
                 </span>
               </h1>
@@ -167,8 +167,8 @@ export default function App() {
               </p>
             </div>
 
-            <div className="relative animate-scale-in space-y-4 bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur-md shadow-xl">
-              <CornerFrame color="violet" />
+            <div className="relative animate-scale-in space-y-4 bg-white/5 border border-white/10 p-6 chamfer backdrop-blur-md shadow-xl">
+              <CornerFrame color="orange" />
               <input
                 type="text"
                 value={roomCodeInput}
@@ -177,13 +177,13 @@ export default function App() {
                 placeholder="EX: PARTIDA-RETRO"
                 maxLength={20}
                 disabled={phase === "searching" || phase === "negotiating"}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white text-center text-xl font-mono tracking-widest placeholder:text-gray-700 focus:outline-none focus:border-violet-400/60 transition-all disabled:opacity-50"
+                className="w-full bg-black/40 border border-white/10 chamfer-sm px-4 py-3 text-white text-center text-xl font-mono tracking-widest placeholder:text-gray-700 focus:outline-none focus:border-orange-400/60 transition-all disabled:opacity-50"
               />
 
               <button
                 onClick={handleConnect}
                 disabled={!roomCodeInput.trim() || phase === "searching" || phase === "negotiating"}
-                className="w-full bg-gradient-to-r from-violet-500 to-amber-500 hover:from-violet-400 hover:to-amber-400 disabled:opacity-40 disabled:pointer-events-none text-black font-bold py-3 rounded-xl transition-all duration-300 hover:scale-[1.01] shadow-lg shadow-violet-500/10"
+                className="w-full bg-orange-500 hover:bg-orange-400 disabled:opacity-40 disabled:pointer-events-none text-black font-bold py-3 chamfer-sm transition-all duration-300 hover:scale-[1.01] shadow-lg shadow-orange-500/20"
               >
                 {phase === "searching"
                   ? "Cercant la sala..."
@@ -194,7 +194,7 @@ export default function App() {
 
               {(phase === "searching" || phase === "negotiating") && (
                 <div className="flex items-center justify-center gap-2 pt-1">
-                  <div className="w-4 h-4 border-2 border-white/10 border-t-violet-400 rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white/10 border-t-orange-400 rounded-full animate-spin" />
                   <p className="text-gray-500 text-xs">
                     {phase === "searching" ? "Esperant que el Host respongui..." : "Establint connexió directa..."}
                   </p>
@@ -208,7 +208,7 @@ export default function App() {
                   </p>
                   <button
                     onClick={handleDisconnect}
-                    className="px-6 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200"
+                    className="px-6 py-2 bg-white/5 border border-white/10 chamfer-sm text-sm text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200"
                   >
                     Tornar a intentar
                   </button>
@@ -217,7 +217,7 @@ export default function App() {
             </div>
 
             {log.length > 0 && (
-              <div className="animate-fade-in-up mt-6 bg-black/50 border border-white/10 rounded-xl p-4 backdrop-blur-md">
+              <div className="animate-fade-in-up mt-6 bg-black/50 border border-white/10 chamfer-sm p-4 backdrop-blur-md">
                 <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2 border-b border-white/5 pb-2">
                   📋 Estat de la connexió
                 </p>
@@ -236,16 +236,16 @@ export default function App() {
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 sm:p-8">
           <div
             ref={containerRef}
-            className="relative rounded-2xl overflow-hidden border border-white/10 bg-black w-full aspect-video shadow-2xl max-w-6xl animate-scale-in"
+            className="relative chamfer overflow-hidden border border-white/10 bg-black w-full aspect-video shadow-2xl max-w-6xl animate-scale-in"
           >
             <canvas ref={canvasRef} className="w-full h-full object-contain block" />
-            <CornerFrame color="violet" />
+            <CornerFrame color="orange" />
 
-            <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center bg-black/70 backdrop-blur-md p-2.5 rounded-xl opacity-0 hover:opacity-100 transition-opacity duration-200 border border-white/5">
+            <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center bg-black/70 backdrop-blur-md p-2.5 chamfer-sm opacity-0 hover:opacity-100 transition-opacity duration-200 border border-white/5">
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleDisconnect}
-                  className="text-xs text-red-400 hover:text-red-300 font-medium px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors duration-200"
+                  className="text-xs text-red-400 hover:text-red-300 font-medium px-3 py-1.5 chamfer-sm bg-red-500/10 hover:bg-red-500/20 transition-colors duration-200"
                 >
                   Desconnectar
                 </button>
@@ -255,7 +255,7 @@ export default function App() {
               </div>
               <button
                 onClick={handleFullscreen}
-                className="text-xs text-white bg-violet-600 hover:bg-violet-500 font-bold px-4 py-1.5 rounded-lg transition-colors duration-200 shadow-md shadow-violet-600/20"
+                className="text-xs text-white bg-orange-600 hover:bg-orange-500 font-bold px-4 py-1.5 chamfer-sm transition-colors duration-200 shadow-md shadow-orange-600/20"
               >
                 📺 Pantalla Completa
               </button>
