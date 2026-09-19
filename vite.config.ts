@@ -13,9 +13,9 @@ export default defineConfig({
       manifest: {
         id: "/",
         lang: "ca",
-        name: "LVCLITS · Visor Remot",
+        name: "LVCLITS · Joc Remot",
         short_name: "LVCLITS",
-        description: "Visor remot del sistema LVCLITS — rep la pantalla d'un altre jugador en temps real.",
+        description: "Juga en remot al sistema LVCLITS — rep la pantalla d'un altre jugador i controla-la amb teclat, ratolí o comandament.",
         start_url: "/",
         scope: "/",
         display: "standalone",

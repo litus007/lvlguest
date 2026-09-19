@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useGuestViewer } from "./hooks/useGuestViewer";
+import { useInputCapture } from "./hooks/useInputCapture";
 import Logo from "./components/common/Logo";
 import CornerFrame from "./components/common/CornerFrame";
 
@@ -14,6 +15,7 @@ export default function App() {
   const [bgFailed, setBgFailed] = useState(false);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
+  const [gamepadName, setGamepadName] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -21,7 +23,41 @@ export default function App() {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect } = useGuestViewer({ canvasRef, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput } = useGuestViewer({ canvasRef, onLog: pushLog });
+
+  // Envia teclat, ratolí i comandament al Host pel canal "inputs" — el
+  // mateix protocol i el mateix hook (100% API de navegador) que fa
+  // servir l'app d'escriptori. Només actiu un cop connectats.
+  useInputCapture({
+    enabled: phase === "connected",
+    onInput: sendInput,
+  });
+
+  // Detecció visible de comandaments — la Gamepad API només informa amb
+  // esdeveniments quan es prem un botó per primer cop, així que també
+  // comprovem l'estat ja connectat en muntar.
+  useEffect(() => {
+    const updateFromList = () => {
+      const pads = navigator.getGamepads?.() ?? [];
+      const first = Array.from(pads).find((p) => p);
+      setGamepadName(first ? first.id : null);
+    };
+    const handleConnected = (e: GamepadEvent) => {
+      setGamepadName(e.gamepad.id);
+      pushLog(`🎮 Comandament detectat: ${e.gamepad.id}`);
+    };
+    const handleDisconnected = () => {
+      updateFromList();
+      pushLog("🎮 Comandament desconnectat.");
+    };
+    updateFromList();
+    window.addEventListener("gamepadconnected", handleConnected);
+    window.addEventListener("gamepaddisconnected", handleDisconnected);
+    return () => {
+      window.removeEventListener("gamepadconnected", handleConnected);
+      window.removeEventListener("gamepaddisconnected", handleDisconnected);
+    };
+  }, [pushLog]);
 
   // Captura l'esdeveniment natiu d'instal·lació (Chrome/Edge/Android) per
   // oferir un botó propi enlloc de dependre només de l'icona del navegador.
@@ -80,12 +116,23 @@ export default function App() {
       <div className="absolute inset-0 bg-gradient-to-b from-[#0d0a1f]/70 via-[#0d0a1f]/85 to-[#0d0a1f]" />
 
       {/* Barra de sistema */}
-      <div className="relative z-10 flex items-center justify-between px-6 py-4">
+      <div className="relative z-10 flex items-center justify-between px-6 py-4 gap-3 flex-wrap">
         <div className="flex items-center gap-2.5 animate-fade-in-up">
           <Logo size={28} />
           <span className="text-white font-extrabold text-sm tracking-[0.25em]">LVCLITS</span>
         </div>
         <div className="flex items-center gap-3 animate-fade-in-up">
+          <div
+            className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-full border transition-colors duration-300 ${
+              gamepadName
+                ? "text-emerald-300 bg-emerald-400/10 border-emerald-400/30"
+                : "text-gray-500 bg-white/5 border-white/10"
+            }`}
+            title={gamepadName ?? "Cap comandament detectat"}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${gamepadName ? "bg-emerald-400 animate-pulse" : "bg-gray-600"}`} />
+            🎮 {gamepadName ? "Comandament actiu" : "Sense comandament"}
+          </div>
           {!installed && installEvent && (
             <button
               onClick={handleInstall}
@@ -106,16 +153,17 @@ export default function App() {
           <div className="max-w-md w-full animate-fade-in-up">
             <div className="text-center mb-8">
               <span className="text-violet-300/80 text-xs uppercase tracking-widest font-semibold">
-                📡 Visor remot
+                🎮 Joc remot
               </span>
               <h1 className="text-4xl font-extrabold text-white tracking-tight mt-2">
-                Rebre{" "}
+                Jugar en{" "}
                 <span className="bg-gradient-to-r from-violet-400 to-amber-400 bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(167,139,250,0.3)]">
-                  pantalla
+                  remot
                 </span>
               </h1>
               <p className="text-gray-400 text-sm mt-2">
-                Introdueix el codi de sala que et doni la persona que comparteix el joc.
+                Introdueix el codi de sala. Un cop connectat, el teclat, el ratolí i el comandament
+                controlaran el joc del Host.
               </p>
             </div>
 
@@ -194,12 +242,17 @@ export default function App() {
             <CornerFrame color="violet" />
 
             <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center bg-black/70 backdrop-blur-md p-2.5 rounded-xl opacity-0 hover:opacity-100 transition-opacity duration-200 border border-white/5">
-              <button
-                onClick={handleDisconnect}
-                className="text-xs text-red-400 hover:text-red-300 font-medium px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors duration-200"
-              >
-                Desconnectar
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleDisconnect}
+                  className="text-xs text-red-400 hover:text-red-300 font-medium px-3 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 transition-colors duration-200"
+                >
+                  Desconnectar
+                </button>
+                <span className="text-[10px] text-emerald-300/80 uppercase tracking-widest hidden sm:inline">
+                  🎮 Control actiu
+                </span>
+              </div>
               <button
                 onClick={handleFullscreen}
                 className="text-xs text-white bg-violet-600 hover:bg-violet-500 font-bold px-4 py-1.5 rounded-lg transition-colors duration-200 shadow-md shadow-violet-600/20"
@@ -213,7 +266,7 @@ export default function App() {
 
       <footer className="relative z-10 text-center pb-4">
         <p className="text-gray-500 text-[10px] tracking-widest uppercase">
-          LVCLITS Platform · Visor remot (només recepció, sense control)
+          LVCLITS Platform · Joc remot (teclat, ratolí i comandament)
         </p>
       </footer>
     </div>

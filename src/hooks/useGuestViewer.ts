@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { InputMessage } from "../types/inputProtocol";
 
 export type ViewerPhase = "idle" | "searching" | "negotiating" | "connected" | "failed";
 
@@ -46,8 +47,11 @@ interface UseGuestViewerOptions {
  *     RTCDataChannel etiquetat "video" amb frames H.264 Annex-B crus,
  *     que decodifiquem amb la WebCodecs API i dibuixem a un <canvas>.
  *
- * Aquest visor només REP pantalla — no obre ni fa servir el canal
- * "inputs" que el Host també ofereix, tal com es va demanar.
+ * Aquest visor REP pantalla i, un cop connectat, també ENVIA els inputs
+ * de teclat, ratolí i comandament — a través del mateix canal de dades
+ * "inputs" que el Host ja obre cap al Guest, amb el mateix format que
+ * fa servir `useInputCapture` a l'app d'escriptori. No calen canvis al
+ * Host: el protocol de missatges és idèntic bit a bit.
  */
 export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   const [phase, setPhase] = useState<ViewerPhase>("idle");
@@ -59,6 +63,7 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   const iceQueueRef = useRef<RTCIceCandidateInit[]>([]);
   const isProcessingOfferRef = useRef(false);
   const failTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputChannelRef = useRef<RTCDataChannel | null>(null);
 
   const videoDecoderRef = useRef<VideoDecoder | null>(null);
   const decoderConfiguredRef = useRef(false);
@@ -148,6 +153,16 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
 
     pc.ondatachannel = (event) => {
       const dc = event.channel;
+
+      if (dc.label === "inputs") {
+        inputChannelRef.current = dc;
+        dc.onopen = () => onLog("🎮 Canal de control obert — teclat, ratolí i comandament actius.");
+        dc.onclose = () => {
+          if (inputChannelRef.current === dc) inputChannelRef.current = null;
+        };
+        return;
+      }
+
       if (dc.label !== "video") return;
 
       dc.binaryType = "arraybuffer";
@@ -265,6 +280,13 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
     }
   }, []);
 
+  const sendInput = useCallback((msg: InputMessage) => {
+    const dc = inputChannelRef.current;
+    if (dc && dc.readyState === "open") {
+      dc.send(JSON.stringify(msg));
+    }
+  }, []);
+
   const connect = useCallback(
     (roomCode: string) => {
       const code = roomCode.trim().toUpperCase();
@@ -324,11 +346,12 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
     decoderConfiguredRef.current = false;
     pendingChunksRef.current = [];
     iceQueueRef.current = [];
+    inputChannelRef.current = null;
 
     setPhase("idle");
   }, []);
 
   useEffect(() => disconnect, [disconnect]);
 
-  return { phase, connect, disconnect };
+  return { phase, connect, disconnect, sendInput };
 }
