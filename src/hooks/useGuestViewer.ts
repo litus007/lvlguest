@@ -5,6 +5,12 @@ import { InputMessage } from "../types/inputProtocol";
 
 export type ViewerPhase = "idle" | "searching" | "negotiating" | "connected" | "failed";
 
+export interface ConnectionStats {
+  rttMs: number | null;
+  packetsLost: number | null;
+  jitterMs: number | null;
+}
+
 type WebRtcSignalMessage =
   | { type: "offer"; fromPeerId: string; sdp: string }
   | { type: "answer"; fromPeerId: string; sdp: string }
@@ -55,6 +61,7 @@ interface UseGuestViewerOptions {
  */
 export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   const [phase, setPhase] = useState<ViewerPhase>("idle");
+  const [stats, setStats] = useState<ConnectionStats>({ rttMs: null, packetsLost: null, jitterMs: null });
 
   const myPeerIdRef = useRef<string>(crypto.randomUUID());
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -63,7 +70,11 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   const iceQueueRef = useRef<RTCIceCandidateInit[]>([]);
   const isProcessingOfferRef = useRef(false);
   const failTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const inputChannelRef = useRef<RTCDataChannel | null>(null);
+  // 🆕 "Només xarxa local": fixat en el moment de `connect()`, abans de
+  // crear el RTCPeerConnection.
+  const lanOnlyRef = useRef(false);
 
   const videoDecoderRef = useRef<VideoDecoder | null>(null);
   const decoderConfiguredRef = useRef(false);
@@ -148,7 +159,7 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   const ensurePeerConnection = useCallback(() => {
     if (pcRef.current) return pcRef.current;
 
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: lanOnlyRef.current ? [] : ICE_SERVERS });
     pcRef.current = pc;
 
     pc.ondatachannel = (event) => {
@@ -204,6 +215,28 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
           failTimeoutRef.current = null;
         }
         setPhase("connected");
+
+        // 📶 Mesura de latència/estabilitat: nivell ICE, vàlida encara que
+        // el vídeo viatgi per un DataChannel i no per un track RTP.
+        if (!statsIntervalRef.current) {
+          statsIntervalRef.current = setInterval(async () => {
+            const activePc = pcRef.current;
+            if (!activePc) return;
+            try {
+              const report = await activePc.getStats();
+              report.forEach((entry) => {
+                if (entry.type === "candidate-pair" && entry.state === "succeeded" && (entry as any).nominated) {
+                  const rtt = (entry as any).currentRoundTripTime;
+                  if (typeof rtt === "number") {
+                    setStats((prev) => ({ ...prev, rttMs: Math.round(rtt * 1000) }));
+                  }
+                }
+              });
+            } catch {
+              // getStats pot fallar momentàniament — es reintenta al següent tick.
+            }
+          }, 2000);
+        }
       }
 
       if (pc.connectionState === "failed" || pc.connectionState === "closed") {
@@ -288,12 +321,13 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   }, []);
 
   const connect = useCallback(
-    (roomCode: string) => {
+    (roomCode: string, lanOnly: boolean = false) => {
       const code = roomCode.trim().toUpperCase();
       if (!code) return;
 
+      lanOnlyRef.current = lanOnly;
       setPhase("searching");
-      onLog(`Cercant la sala "${code}"...`);
+      onLog(`Cercant la sala "${code}"...${lanOnly ? " (mode només-LAN)" : ""}`);
 
       const signalChannel = supabase
         .channel(`webrtc-signal:${code}`, { config: { broadcast: { self: false } } })
@@ -327,6 +361,8 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   const disconnect = useCallback(() => {
     if (failTimeoutRef.current) clearTimeout(failTimeoutRef.current);
     failTimeoutRef.current = null;
+    if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+    statsIntervalRef.current = null;
 
     if (pcRef.current) {
       pcRef.current.close();
@@ -349,9 +385,11 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
     inputChannelRef.current = null;
 
     setPhase("idle");
+    setStats({ rttMs: null, packetsLost: null, jitterMs: null });
+    lanOnlyRef.current = false;
   }, []);
 
   useEffect(() => disconnect, [disconnect]);
 
-  return { phase, connect, disconnect, sendInput };
+  return { phase, connect, disconnect, sendInput, stats };
 }

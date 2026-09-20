@@ -3,6 +3,7 @@ import { useGuestViewer } from "./hooks/useGuestViewer";
 import { useInputCapture } from "./hooks/useInputCapture";
 import Logo from "./components/common/Logo";
 import CornerFrame from "./components/common/CornerFrame";
+import PingBadge from "./components/common/PingBadge";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -16,6 +17,7 @@ export default function App() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [gamepadName, setGamepadName] = useState<string | null>(null);
+  const [lanOnly, setLanOnly] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -23,7 +25,7 @@ export default function App() {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect, sendInput } = useGuestViewer({ canvasRef, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput, stats: connectionStats } = useGuestViewer({ canvasRef, onLog: pushLog });
 
   // Envia teclat, ratolí i comandament al Host pel canal "inputs" — el
   // mateix protocol i el mateix hook (100% API de navegador) que fa
@@ -82,7 +84,7 @@ export default function App() {
 
   const handleConnect = () => {
     if (!roomCodeInput.trim()) return;
-    connect(roomCodeInput);
+    connect(roomCodeInput, lanOnly);
   };
 
   const handleFullscreen = () => {
@@ -192,6 +194,33 @@ export default function App() {
                   : "Connectar →"}
               </button>
 
+              <label className="flex items-center gap-3 px-1 py-1 cursor-pointer group">
+                <span
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center chamfer-sm transition-colors duration-200 ${
+                    lanOnly ? "bg-orange-500/60" : "bg-white/10"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={lanOnly}
+                    disabled={phase === "searching" || phase === "negotiating"}
+                    onChange={(e) => setLanOnly(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform bg-white transition-transform duration-200 ${
+                      lanOnly ? "translate-x-5" : "translate-x-1"
+                    }`}
+                  />
+                </span>
+                <span className="text-xs text-gray-300 group-hover:text-white transition-colors">
+                  📡 Només xarxa local (LAN)
+                  <span className="block text-[10px] text-gray-500">
+                    Sense servidors externs — més ràpid, però només funciona si esteu a la mateixa xarxa que el Host
+                  </span>
+                </span>
+              </label>
+
               {(phase === "searching" || phase === "negotiating") && (
                 <div className="flex items-center justify-center gap-2 pt-1">
                   <div className="w-4 h-4 border-2 border-white/10 border-t-orange-400 rounded-full animate-spin" />
@@ -240,6 +269,10 @@ export default function App() {
           >
             <canvas ref={canvasRef} className="w-full h-full object-contain block" />
             <CornerFrame color="orange" />
+
+            <div className="absolute top-3 right-3">
+              <PingBadge rttMs={connectionStats.rttMs} packetsLost={connectionStats.packetsLost} />
+            </div>
 
             <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center bg-black/70 backdrop-blur-md p-2.5 chamfer-sm opacity-0 hover:opacity-100 transition-opacity duration-200 border border-white/5">
               <div className="flex items-center gap-3">
