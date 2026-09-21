@@ -4,6 +4,7 @@ import { useInputCapture } from "./hooks/useInputCapture";
 import Logo from "./components/common/Logo";
 import CornerFrame from "./components/common/CornerFrame";
 import PingBadge from "./components/common/PingBadge";
+import VirtualGamepad from "./components/common/VirtualGamepad";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -18,6 +19,9 @@ export default function App() {
   const [installed, setInstalled] = useState(false);
   const [gamepadName, setGamepadName] = useState<string | null>(null);
   const [lanOnly, setLanOnly] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showVirtualPad, setShowVirtualPad] = useState(false);
+  const isTouchDevice = typeof window !== "undefined" && (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +78,29 @@ export default function App() {
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
+  // 🕹️ Pantalla completa: escoltem l'esdeveniment natiu perquè el botó
+  // reflecteixi l'estat real (fins i tot si es surt amb Esc) i perquè
+  // funcioni també a Safari/iOS (prefix "webkit").
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!(document.fullscreenElement || (document as any).webkitFullscreenElement));
+    };
+    document.addEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      document.removeEventListener("webkitfullscreenchange", handleFsChange);
+    };
+  }, []);
+
+  // En un dispositiu tàctil, mostrem el mando virtual automàticament un
+  // cop connectats — es pot amagar amb el botó corresponent.
+  useEffect(() => {
+    if (phase === "connected" && isTouchDevice) {
+      setShowVirtualPad(true);
+    }
+  }, [phase, isTouchDevice]);
+
   const handleInstall = async () => {
     if (!installEvent) return;
     await installEvent.prompt();
@@ -88,12 +115,15 @@ export default function App() {
   };
 
   const handleFullscreen = () => {
-    const el = containerRef.current;
+    const el = containerRef.current as any;
     if (!el) return;
-    if (!document.fullscreenElement) {
-      el.requestFullscreen().catch(() => {});
+    const isFs = document.fullscreenElement || (document as any).webkitFullscreenElement;
+    if (!isFs) {
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      req?.call(el)?.catch?.(() => {});
     } else {
-      document.exitFullscreen();
+      const exit = document.exitFullscreen || (document as any).webkitExitFullscreen;
+      exit?.call(document);
     }
   };
 
@@ -270,28 +300,39 @@ export default function App() {
             <canvas ref={canvasRef} className="w-full h-full object-contain block" />
             <CornerFrame color="orange" />
 
-            <div className="absolute top-3 right-3">
-              <PingBadge rttMs={connectionStats.rttMs} packetsLost={connectionStats.packetsLost} />
-            </div>
+            {showVirtualPad && <VirtualGamepad onInput={sendInput} />}
 
-            <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center bg-black/70 backdrop-blur-md p-2.5 chamfer-sm opacity-0 hover:opacity-100 transition-opacity duration-200 border border-white/5">
-              <div className="flex items-center gap-3">
+            <div className="absolute top-3 left-3 right-3 flex justify-between items-center bg-black/70 backdrop-blur-md p-2.5 chamfer-sm opacity-80 hover:opacity-100 transition-opacity duration-200 border border-white/5">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleDisconnect}
                   className="text-xs text-red-400 hover:text-red-300 font-medium px-3 py-1.5 chamfer-sm bg-red-500/10 hover:bg-red-500/20 transition-colors duration-200"
                 >
                   Desconnectar
                 </button>
+                {isTouchDevice && (
+                  <button
+                    onClick={() => setShowVirtualPad((v) => !v)}
+                    className={`text-xs font-semibold px-3 py-1.5 chamfer-sm transition-colors duration-200 ${
+                      showVirtualPad ? "text-orange-200 bg-orange-500/20" : "text-gray-300 bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    🕹️ Mando tàctil
+                  </button>
+                )}
                 <span className="text-[10px] text-emerald-300/80 uppercase tracking-widest hidden sm:inline">
                   🎮 Control actiu
                 </span>
               </div>
-              <button
-                onClick={handleFullscreen}
-                className="text-xs text-white bg-orange-600 hover:bg-orange-500 font-bold px-4 py-1.5 chamfer-sm transition-colors duration-200 shadow-md shadow-orange-600/20"
-              >
-                📺 Pantalla Completa
-              </button>
+              <div className="flex items-center gap-2">
+                <PingBadge rttMs={connectionStats.rttMs} packetsLost={connectionStats.packetsLost} />
+                <button
+                  onClick={handleFullscreen}
+                  className="text-xs text-white bg-orange-600 hover:bg-orange-500 font-bold px-4 py-1.5 chamfer-sm transition-colors duration-200 shadow-md shadow-orange-600/20 whitespace-nowrap"
+                >
+                  {isFullscreen ? "🡼 Sortir" : "📺 Pantalla Completa"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
