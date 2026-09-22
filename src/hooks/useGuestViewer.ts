@@ -36,6 +36,7 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 interface UseGuestViewerOptions {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
   onLog: (message: string) => void;
 }
 
@@ -59,7 +60,7 @@ interface UseGuestViewerOptions {
  * fa servir `useInputCapture` a l'app d'escriptori. No calen canvis al
  * Host: el protocol de missatges és idèntic bit a bit.
  */
-export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
+export function useGuestViewer({ canvasRef, audioRef, onLog }: UseGuestViewerOptions) {
   const [phase, setPhase] = useState<ViewerPhase>("idle");
   const [stats, setStats] = useState<ConnectionStats>({ rttMs: null, packetsLost: null, jitterMs: null });
 
@@ -79,6 +80,8 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
   const videoDecoderRef = useRef<VideoDecoder | null>(null);
   const decoderConfiguredRef = useRef(false);
   const pendingChunksRef = useRef<Uint8Array[]>([]);
+  const decodedFrameCountRef = useRef(0);
+  const fpsWindowStartRef = useRef(performance.now());
 
   const isKeyFrameAnnexB = (buf: Uint8Array): boolean => {
     let i = 0;
@@ -116,6 +119,18 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
               ctx.drawImage(videoFrame, 0, 0, canvas.width, canvas.height);
             }
             videoFrame.close();
+
+            // 🔎 DIAGNÒSTIC: FPS reals de decodificació+pintat al canvas,
+            // cada ~2s — per saber si el coll d'ampolla és aquí (navegador)
+            // o a la captura/codificació del Host.
+            decodedFrameCountRef.current += 1;
+            const windowElapsed = performance.now() - fpsWindowStartRef.current;
+            if (windowElapsed >= 2000) {
+              const fps = (decodedFrameCountRef.current / windowElapsed) * 1000;
+              onLog(`🔎 Decodificació: ${fps.toFixed(1)} FPS reals al canvas.`);
+              decodedFrameCountRef.current = 0;
+              fpsWindowStartRef.current = performance.now();
+            }
           },
           error: (e) => console.error("[GUEST-WEB] Error VideoDecoder:", e),
         });
@@ -161,6 +176,23 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
 
     const pc = new RTCPeerConnection({ iceServers: lanOnlyRef.current ? [] : ICE_SERVERS });
     pcRef.current = pc;
+
+    // 🔊 L'àudio del Host arriba com a track RTP real (Opus), no pel canal
+    // de dades — el vídeo sí que va per DataChannel, però l'àudio segueix
+    // el camí WebRTC estàndard. El Host el posa al MATEIX MediaStream que
+    // el (vestigial) track de vídeo, així que n'hi ha prou d'enganxar
+    // `event.streams[0]` a un <audio> ocult.
+    pc.ontrack = (event) => {
+      onLog(`🎯 Track WebRTC rebut del Host (tipus: ${event.track.kind}, id: ${event.track.id}).`);
+      const audioEl = audioRef.current;
+      if (!audioEl) return;
+      audioEl.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+      audioEl.play().catch((err) => {
+        // Els navegadors solen bloquejar l'autoplay amb so — l'usuari ja
+        // té el botó "Activar So" per iniciar-lo amb un gest explícit.
+        onLog(`⚠️ audio.play() bloquejat pel navegador (normal fins prémer "Activar So"): ${err?.name ?? err}`);
+      });
+    };
 
     pc.ondatachannel = (event) => {
       const dc = event.channel;
@@ -264,7 +296,17 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
         const offer: RTCSessionDescriptionInit = JSON.parse(sdp);
         await pc.setRemoteDescription(new RTCSessionDescription(offer));
 
-        const answer = await pc.createAnswer({ offerToReceiveVideo: true, offerToReceiveAudio: false });
+        // 🔎 DIAGNÒSTIC: registrem quins "transceivers" ha creat el navegador
+        // en processar l'oferta — si aquí ja no hi ha cap transceiver
+        // d'àudio/vídeo (o surten "stopped"/"inactive"), el problema és de
+        // negociació SDP, no del nostre codi de reproducció.
+        const transceiverInfo = pc
+          .getTransceivers()
+          .map((t) => `${t.receiver.track?.kind ?? "?"}:${t.currentDirection ?? t.direction}`)
+          .join(", ");
+        onLog(`🔎 Transceivers negociats: [${transceiverInfo || "cap"}]`);
+
+        const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
         sendSignal({
@@ -383,6 +425,9 @@ export function useGuestViewer({ canvasRef, onLog }: UseGuestViewerOptions) {
     pendingChunksRef.current = [];
     iceQueueRef.current = [];
     inputChannelRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.srcObject = null;
+    }
 
     setPhase("idle");
     setStats({ rttMs: null, packetsLost: null, jitterMs: null });
