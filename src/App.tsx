@@ -24,14 +24,13 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(true);
   const isTouchDevice = typeof window !== "undefined" && (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const pushLog = useCallback((message: string) => {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect, sendInput, stats: connectionStats } = useGuestViewer({ canvasRef, audioRef, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput, stats: connectionStats } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
 
   // Envia teclat, ratolí i comandament al Host pel canal "inputs" — el
   // mateix protocol i el mateix hook (100% API de navegador) que fa
@@ -301,7 +300,6 @@ export default function App() {
             className="relative chamfer overflow-hidden border border-white/10 bg-black w-full aspect-video shadow-2xl max-w-6xl animate-scale-in"
           >
             <canvas ref={canvasRef} className="w-full h-full object-contain block" />
-            <audio ref={audioRef} autoPlay muted={isMuted} />
             <CornerFrame color="orange" />
 
             {showVirtualPad && <VirtualGamepad onInput={sendInput} />}

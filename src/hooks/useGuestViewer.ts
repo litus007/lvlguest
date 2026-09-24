@@ -36,7 +36,11 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 interface UseGuestViewerOptions {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+  // 🛡️ Substitueix l'antic `audioRef` (<audio> ocult amb el track RTP,
+  // que mai va sonar — vegis el fix a `ondatachannel`/"audio" més avall).
+  // Ara la reproducció és 100% Web Audio API; només calen mut/resume,
+  // controlats des de fora amb el mateix botó "Activar So" de sempre.
+  audioMuted: boolean;
   onLog: (message: string) => void;
 }
 
@@ -60,7 +64,7 @@ interface UseGuestViewerOptions {
  * fa servir `useInputCapture` a l'app d'escriptori. No calen canvis al
  * Host: el protocol de missatges és idèntic bit a bit.
  */
-export function useGuestViewer({ canvasRef, audioRef, onLog }: UseGuestViewerOptions) {
+export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerOptions) {
   const [phase, setPhase] = useState<ViewerPhase>("idle");
   const [stats, setStats] = useState<ConnectionStats>({ rttMs: null, packetsLost: null, jitterMs: null });
 
@@ -82,6 +86,126 @@ export function useGuestViewer({ canvasRef, audioRef, onLog }: UseGuestViewerOpt
   const pendingChunksRef = useRef<Uint8Array[]>([]);
   const decodedFrameCountRef = useRef(0);
   const fpsWindowStartRef = useRef(performance.now());
+
+  // 🔊 Reproducció d'àudio 100% Web Audio API — el track RTP d'àudio mai
+  // va sonar (vegis el fix a `ondatachannel`/"audio"), així que ara
+  // rebem paquets Opus crus pel DataChannel i els decodifiquem/programem
+  // nosaltres mateixos, sense passar per cap <audio>/<video> element.
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const masterGainRef = useRef<GainNode | null>(null);
+  const audioDecoderRef = useRef<AudioDecoder | null>(null);
+  const audioDecoderConfiguredRef = useRef(false);
+  const nextPlayTimeRef = useRef(0);
+  const audioTimestampRef = useRef(0);
+  const audioPacketCountRef = useRef(0);
+
+  const ensureAudioContext = useCallback(() => {
+    if (audioCtxRef.current) return audioCtxRef.current;
+    if (typeof AudioContext === "undefined") return null;
+    const ctx = new AudioContext({ sampleRate: 48000 });
+    const gain = ctx.createGain();
+    gain.gain.value = audioMuted ? 0 : 1;
+    gain.connect(ctx.destination);
+    audioCtxRef.current = ctx;
+    masterGainRef.current = gain;
+    return ctx;
+  }, [audioMuted]);
+
+  const handleAudioPacket = useCallback(
+    (opusPacket: Uint8Array) => {
+      if (typeof AudioDecoder === "undefined") {
+        if (audioPacketCountRef.current === 0) {
+          onLog("❌ Aquest navegador no suporta WebCodecs (AudioDecoder). Prova amb Chrome o Edge recents.");
+        }
+        audioPacketCountRef.current += 1;
+        return;
+      }
+
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+
+      if (!audioDecoderRef.current) {
+        audioDecoderRef.current = new AudioDecoder({
+          output: (audioData) => {
+            const gain = masterGainRef.current;
+            if (!gain) {
+              audioData.close();
+              return;
+            }
+            const numberOfChannels = audioData.numberOfChannels;
+            const buffer = ctx.createBuffer(numberOfChannels, audioData.numberOfFrames, audioData.sampleRate);
+            const chan = new Float32Array(audioData.numberOfFrames);
+            for (let c = 0; c < numberOfChannels; c++) {
+              audioData.copyTo(chan, { planeIndex: c, format: "f32-planar" });
+              buffer.copyToChannel(chan, c);
+            }
+            audioData.close();
+
+            const src = ctx.createBufferSource();
+            src.buffer = buffer;
+            src.connect(gain);
+
+            // Programació seqüencial sense forats/talls: si ens hem
+            // quedat enrere (backlog buit o negatiu), reprenem amb un
+            // petit marge (~80ms) en lloc d'intentar recuperar el retard
+            // acumulat — per a àudio en temps real, un forat curt és
+            // preferible a anar sempre endarrerit.
+            const now = ctx.currentTime;
+            if (nextPlayTimeRef.current < now) {
+              nextPlayTimeRef.current = now + 0.08;
+            }
+            src.start(nextPlayTimeRef.current);
+            nextPlayTimeRef.current += buffer.duration;
+          },
+          error: (e) => console.error("[GUEST-WEB] Error AudioDecoder:", e),
+        });
+      }
+
+      if (!audioDecoderConfiguredRef.current) {
+        try {
+          audioDecoderRef.current.configure({
+            codec: "opus",
+            sampleRate: 48000,
+            numberOfChannels: 2,
+          });
+          audioDecoderConfiguredRef.current = true;
+        } catch (e) {
+          onLog(`❌ Error configurant AudioDecoder: ${e}`);
+          return;
+        }
+      }
+
+      audioPacketCountRef.current += 1;
+      if (audioPacketCountRef.current === 1) {
+        onLog(`🔊 Primer paquet d'àudio rebut (${opusPacket.length} bytes).`);
+      }
+
+      try {
+        audioTimestampRef.current += 20000; // 20ms en microsegons
+        audioDecoderRef.current.decode(
+          new EncodedAudioChunk({
+            type: "key",
+            timestamp: audioTimestampRef.current,
+            data: opusPacket,
+          })
+        );
+      } catch {
+        // Paquet corrupte o fora d'ordre — el següent ja ho corregeix sol.
+      }
+    },
+    [ensureAudioContext, onLog]
+  );
+
+  // Mut/activar so i "despertar" l'AudioContext (requereix gest d'usuari
+  // als navegadors) sempre que canviï `audioMuted` des de fora.
+  useEffect(() => {
+    if (masterGainRef.current) {
+      masterGainRef.current.gain.value = audioMuted ? 0 : 1;
+    }
+    if (!audioMuted) {
+      audioCtxRef.current?.resume().catch(() => {});
+    }
+  }, [audioMuted]);
 
   const isKeyFrameAnnexB = (buf: Uint8Array): boolean => {
     let i = 0;
@@ -177,21 +301,14 @@ export function useGuestViewer({ canvasRef, audioRef, onLog }: UseGuestViewerOpt
     const pc = new RTCPeerConnection({ iceServers: lanOnlyRef.current ? [] : ICE_SERVERS });
     pcRef.current = pc;
 
-    // 🔊 L'àudio del Host arriba com a track RTP real (Opus), no pel canal
-    // de dades — el vídeo sí que va per DataChannel, però l'àudio segueix
-    // el camí WebRTC estàndard. El Host el posa al MATEIX MediaStream que
-    // el (vestigial) track de vídeo, així que n'hi ha prou d'enganxar
-    // `event.streams[0]` a un <audio> ocult.
+    // 🛡️ FIX (el so mai s'escoltava): l'àudio anava pel track RTP/SRTP
+    // "normal" — el MATEIX mecanisme que ja vam haver de descartar pel
+    // vídeo perquè no funcionava en aquest muntatge de webrtc-rs. El
+    // Host ara envia l'àudio pel DataChannel "audio" (com el vídeo), i
+    // aquest track RTP es manté només de forma vestigial — no cal fer
+    // res amb ell.
     pc.ontrack = (event) => {
-      onLog(`🎯 Track WebRTC rebut del Host (tipus: ${event.track.kind}, id: ${event.track.id}).`);
-      const audioEl = audioRef.current;
-      if (!audioEl) return;
-      audioEl.srcObject = event.streams[0] ?? new MediaStream([event.track]);
-      audioEl.play().catch((err) => {
-        // Els navegadors solen bloquejar l'autoplay amb so — l'usuari ja
-        // té el botó "Activar So" per iniciar-lo amb un gest explícit.
-        onLog(`⚠️ audio.play() bloquejat pel navegador (normal fins prémer "Activar So"): ${err?.name ?? err}`);
-      });
+      onLog(`🎯 Track WebRTC rebut del Host (tipus: ${event.track.kind}, id: ${event.track.id}) — vestigial, ignorat.`);
     };
 
     pc.ondatachannel = (event) => {
@@ -202,6 +319,17 @@ export function useGuestViewer({ canvasRef, audioRef, onLog }: UseGuestViewerOpt
         dc.onopen = () => onLog("🎮 Canal de control obert — teclat, ratolí i comandament actius.");
         dc.onclose = () => {
           if (inputChannelRef.current === dc) inputChannelRef.current = null;
+        };
+        return;
+      }
+
+      if (dc.label === "audio") {
+        dc.binaryType = "arraybuffer";
+        dc.onopen = () => onLog("🔊 Canal d'àudio obert.");
+        dc.onmessage = (msg) => {
+          const buf = new Uint8Array(msg.data as ArrayBuffer);
+          if (buf.length === 0) return;
+          handleAudioPacket(buf);
         };
         return;
       }
@@ -283,7 +411,7 @@ export function useGuestViewer({ canvasRef, audioRef, onLog }: UseGuestViewerOpt
     };
 
     return pc;
-  }, [handleVideoFrame, onLog, sendSignal]);
+  }, [handleAudioPacket, handleVideoFrame, onLog, sendSignal]);
 
   const applyOffer = useCallback(
     async (sdp: string) => {
@@ -425,9 +553,16 @@ export function useGuestViewer({ canvasRef, audioRef, onLog }: UseGuestViewerOpt
     pendingChunksRef.current = [];
     iceQueueRef.current = [];
     inputChannelRef.current = null;
-    if (audioRef.current) {
-      audioRef.current.srcObject = null;
-    }
+
+    audioDecoderRef.current?.close();
+    audioDecoderRef.current = null;
+    audioDecoderConfiguredRef.current = false;
+    audioTimestampRef.current = 0;
+    nextPlayTimeRef.current = 0;
+    audioPacketCountRef.current = 0;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    masterGainRef.current = null;
 
     setPhase("idle");
     setStats({ rttMs: null, packetsLost: null, jitterMs: null });
