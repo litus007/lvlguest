@@ -30,7 +30,7 @@ export default function App() {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect, sendInput, stats: connectionStats } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput, stats: connectionStats, diagSnapshot } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
 
   // Envia teclat, ratolí i comandament al Host pel canal "inputs" — el
   // mateix protocol i el mateix hook (100% API de navegador) que fa
@@ -301,6 +301,32 @@ export default function App() {
           >
             <canvas ref={canvasRef} className="w-full h-full object-contain block" />
             <CornerFrame color="orange" />
+
+            {diagSnapshot && (
+              <div className="absolute top-2 right-2 z-20 bg-black/85 border border-orange-400/30 chamfer-sm px-3 py-2 text-[11px] text-gray-200 max-w-xs space-y-0.5 font-mono">
+                <p className="text-orange-300 font-semibold mb-1">
+                  🩺 {String((diagSnapshot as any).hostname ?? "Host")}
+                </p>
+                <p>{String((diagSnapshot as any).os_name)} · {String((diagSnapshot as any).os_version)}</p>
+                <p>
+                  CPU: {String((diagSnapshot as any).cpu?.brand)} —{" "}
+                  {Number((diagSnapshot as any).cpu?.global_usage_percent ?? 0).toFixed(0)}%
+                </p>
+                <p>
+                  RAM: {Number((diagSnapshot as any).memory?.used_gb ?? 0).toFixed(1)} /{" "}
+                  {Number((diagSnapshot as any).memory?.total_gb ?? 0).toFixed(1)} GB (
+                  {Number((diagSnapshot as any).memory?.used_percent ?? 0).toFixed(0)}%)
+                </p>
+                {((diagSnapshot as any).disks ?? []).map((d: any) => (
+                  <p key={d.mount_point}>
+                    💾 {d.mount_point}: {d.available_gb.toFixed(1)} GB lliures ({d.used_percent.toFixed(0)}% ple)
+                  </p>
+                ))}
+                {((diagSnapshot as any).warnings ?? []).map((w: string, i: number) => (
+                  <p key={i} className="text-red-300">{w}</p>
+                ))}
+              </div>
+            )}
 
             {showVirtualPad && <VirtualGamepad onInput={sendInput} />}
 

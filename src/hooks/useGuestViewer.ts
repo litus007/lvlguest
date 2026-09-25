@@ -67,6 +67,9 @@ interface UseGuestViewerOptions {
 export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerOptions) {
   const [phase, setPhase] = useState<ViewerPhase>("idle");
   const [stats, setStats] = useState<ConnectionStats>({ rttMs: null, packetsLost: null, jitterMs: null });
+  // 🩺 Panell de diagnòstic del Host (mode "Manteniment Remot") — arriba un
+  // únic cop pel canal fiable "diag" en connectar.
+  const [diagSnapshot, setDiagSnapshot] = useState<Record<string, unknown> | null>(null);
 
   const myPeerIdRef = useRef<string>(crypto.randomUUID());
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -334,6 +337,19 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         return;
       }
 
+      if (dc.label === "diag") {
+        dc.onmessage = (msg) => {
+          if (typeof msg.data !== "string") return;
+          try {
+            setDiagSnapshot(JSON.parse(msg.data));
+            onLog("🩺 Panell de diagnòstic del Host rebut.");
+          } catch (e) {
+            onLog(`❌ Error parsejant el diagnòstic: ${e}`);
+          }
+        };
+        return;
+      }
+
       if (dc.label !== "video") return;
 
       dc.binaryType = "arraybuffer";
@@ -566,10 +582,11 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
     setPhase("idle");
     setStats({ rttMs: null, packetsLost: null, jitterMs: null });
+    setDiagSnapshot(null);
     lanOnlyRef.current = false;
   }, []);
 
   useEffect(() => disconnect, [disconnect]);
 
-  return { phase, connect, disconnect, sendInput, stats };
+  return { phase, connect, disconnect, sendInput, stats, diagSnapshot };
 }
