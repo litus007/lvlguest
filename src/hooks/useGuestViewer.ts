@@ -352,24 +352,69 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
       if (dc.label !== "video") return;
 
+      // 🩺 FIX DE QUALITAT (mateix motiu que a l'app d'escriptori, vegis
+      // `useGuestPeerConnection.ts`): aquest canal és `ordered: false,
+      // max_retransmits: 0` al Host — sense ordre ni garantia d'entrega.
+      // Concatenar per ordre d'arribada amb només un bit "és l'últim" (com
+      // abans) pot ajuntar trossos de frames diferents o en l'ordre
+      // equivocat sense poder-ho detectar. Ara cada tros porta una
+      // capçalera de 8 bytes (frame_id u32 LE, chunk_index u16 LE,
+      // total_chunks u16 LE): reordenem per `chunk_index` i descartem el
+      // frame sencer si en falta algun, en lloc de lliurar-lo corrupte.
       dc.binaryType = "arraybuffer";
-      let pending: Uint8Array[] = [];
+      const HEADER_BYTES = 8;
+      const pendingFrames = new Map<
+        number,
+        { chunks: (Uint8Array | undefined)[]; received: number; firstSeenAt: number }
+      >();
+      const MAX_PENDING_FRAMES = 6;
+      const FRAME_TIMEOUT_MS = 700;
+
       dc.onopen = () => onLog("🎬 Canal de vídeo obert.");
       dc.onmessage = (msg) => {
         const buf = new Uint8Array(msg.data as ArrayBuffer);
-        if (buf.length === 0) return;
-        const isLast = buf[0] === 1;
-        pending.push(buf.subarray(1));
-        if (isLast) {
-          const totalLen = pending.reduce((acc, p) => acc + p.length, 0);
+        if (buf.length < HEADER_BYTES) return;
+        const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+        const frameId = view.getUint32(0, true);
+        const chunkIndex = view.getUint16(4, true);
+        const totalChunks = view.getUint16(6, true);
+        const payload = buf.subarray(HEADER_BYTES);
+
+        if (totalChunks === 0 || chunkIndex >= totalChunks) return;
+
+        let entry = pendingFrames.get(frameId);
+        if (!entry) {
+          entry = { chunks: new Array(totalChunks), received: 0, firstSeenAt: performance.now() };
+          pendingFrames.set(frameId, entry);
+          if (pendingFrames.size > MAX_PENDING_FRAMES) {
+            const oldestKey = [...pendingFrames.keys()].sort((a, b) => a - b)[0];
+            pendingFrames.delete(oldestKey);
+          }
+        }
+
+        if (!entry.chunks[chunkIndex]) {
+          entry.chunks[chunkIndex] = payload;
+          entry.received += 1;
+        }
+
+        if (entry.received === totalChunks) {
+          pendingFrames.delete(frameId);
+          const totalLen = entry.chunks.reduce((acc, p) => acc + (p?.length ?? 0), 0);
           const frame = new Uint8Array(totalLen);
           let offset = 0;
-          for (const p of pending) {
+          for (const p of entry.chunks) {
+            if (!p) return;
             frame.set(p, offset);
             offset += p.length;
           }
-          pending = [];
           handleVideoFrame(frame);
+        }
+
+        const now = performance.now();
+        for (const [id, e] of pendingFrames) {
+          if (now - e.firstSeenAt > FRAME_TIMEOUT_MS) {
+            pendingFrames.delete(id);
+          }
         }
       };
     };
