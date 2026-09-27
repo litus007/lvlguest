@@ -80,6 +80,10 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   const failTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const inputChannelRef = useRef<RTCDataChannel | null>(null);
+  // 🆕 Mode "Assistència Remota": referències pròpies per poder enviar-hi
+  // dades des de fora (botó "Actualitza estadístiques" / enviar un fitxer).
+  const diagChannelRef = useRef<RTCDataChannel | null>(null);
+  const filesChannelRef = useRef<RTCDataChannel | null>(null);
   // 🆕 "Només xarxa local": fixat en el moment de `connect()`, abans de
   // crear el RTCPeerConnection.
   const lanOnlyRef = useRef(false);
@@ -338,14 +342,27 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       }
 
       if (dc.label === "diag") {
+        diagChannelRef.current = dc;
+        dc.onclose = () => {
+          if (diagChannelRef.current === dc) diagChannelRef.current = null;
+        };
         dc.onmessage = (msg) => {
           if (typeof msg.data !== "string") return;
           try {
             setDiagSnapshot(JSON.parse(msg.data));
-            onLog("🩺 Panell de diagnòstic del Host rebut.");
+            onLog("🩺 Estadístiques del Host rebudes.");
           } catch (e) {
             onLog(`❌ Error parsejant el diagnòstic: ${e}`);
           }
+        };
+        return;
+      }
+
+      if (dc.label === "files") {
+        filesChannelRef.current = dc;
+        dc.onopen = () => onLog("📁 Canal de fitxers obert.");
+        dc.onclose = () => {
+          if (filesChannelRef.current === dc) filesChannelRef.current = null;
         };
         return;
       }
@@ -552,7 +569,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   }, []);
 
   const connect = useCallback(
-    (roomCode: string, lanOnly: boolean = false) => {
+    (roomCode: string, lanOnly: boolean = false, mode: "game" | "assist" = "game") => {
       const code = roomCode.trim().toUpperCase();
       if (!code) return;
 
@@ -560,8 +577,14 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       setPhase("searching");
       onLog(`Cercant la sala "${code}"...${lanOnly ? " (mode només-LAN)" : ""}`);
 
+      // 🩺 Mode "Assistència Remota": mateix espai de noms que fa servir el
+      // Host (`webrtc_assist_create_offer` + `assist-presence:<codi>`) per
+      // no col·lidir mai amb una sala de "Compartir Joc" amb el mateix codi.
+      const signalRoomId = mode === "assist" ? `assist:${code}` : code;
+      const presenceRoomName = mode === "assist" ? `assist-presence:${code}` : `streaming-presence:${code}`;
+
       const signalChannel = supabase
-        .channel(`webrtc-signal:${code}`, { config: { broadcast: { self: false } } })
+        .channel(`webrtc-signal:${signalRoomId}`, { config: { broadcast: { self: false } } })
         .on("broadcast", { event: "webrtc-signal" }, ({ payload }: { payload: WebRtcSignalMessage }) => {
           if (payload.fromPeerId === myPeerIdRef.current) return;
           if (payload.type === "offer") {
@@ -575,7 +598,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         .subscribe();
       signalChannelRef.current = signalChannel;
 
-      const presenceChannel = supabase.channel(`streaming-presence:${code}`, {
+      const presenceChannel = supabase.channel(presenceRoomName, {
         config: { presence: { key: myPeerIdRef.current } },
       });
       presenceChannel.subscribe(async (status) => {
@@ -587,6 +610,43 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       presenceChannelRef.current = presenceChannel;
     },
     [addIceCandidate, applyOffer, onLog]
+  );
+
+  // 🩺 Demana un snapshot fresc de diagnòstic al Host (botó "Actualitza
+  // estadístiques" — mai automàtic).
+  const requestDiagRefresh = useCallback(() => {
+    const dc = diagChannelRef.current;
+    if (dc && dc.readyState === "open") {
+      dc.send("refresh");
+    }
+  }, []);
+
+  // 📁 Envia un fitxer sencer al Host pel canal "files" (fiable i ordenat).
+  // Mateix protocol que l'app d'escriptori — vegis `file_transfer.rs`.
+  const sendFileToHost = useCallback(
+    async (file: File, onProgress?: (sentBytes: number, totalBytes: number) => void) => {
+      const dc = filesChannelRef.current;
+      if (!dc || dc.readyState !== "open") {
+        throw new Error("El canal de fitxers no està obert.");
+      }
+      const CHUNK_SIZE = 16_000;
+      dc.send(JSON.stringify({ type: "start", name: file.name, size: file.size }));
+
+      const buffer = await file.arrayBuffer();
+      let offset = 0;
+      while (offset < buffer.byteLength) {
+        const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
+        while (dc.bufferedAmount > 8 * CHUNK_SIZE) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        dc.send(chunk);
+        offset += chunk.byteLength;
+        onProgress?.(offset, buffer.byteLength);
+      }
+
+      dc.send(JSON.stringify({ type: "end" }));
+    },
+    []
   );
 
   const disconnect = useCallback(() => {
@@ -614,6 +674,8 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     pendingChunksRef.current = [];
     iceQueueRef.current = [];
     inputChannelRef.current = null;
+    diagChannelRef.current = null;
+    filesChannelRef.current = null;
 
     audioDecoderRef.current?.close();
     audioDecoderRef.current = null;
@@ -633,5 +695,5 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
   useEffect(() => disconnect, [disconnect]);
 
-  return { phase, connect, disconnect, sendInput, stats, diagSnapshot };
+  return { phase, connect, disconnect, sendInput, stats, diagSnapshot, requestDiagRefresh, sendFileToHost };
 }

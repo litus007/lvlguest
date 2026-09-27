@@ -4,16 +4,28 @@ import { InputMessage } from "../types/inputProtocol";
 interface UseInputCaptureOptions {
   enabled: boolean;
   onInput: (msg: InputMessage) => void;
+  // 🛡️ FIX DE SEGURETAT (setembre 2026): abans, el ratolí i el tàctil
+  // s'enganxaven a `window` sencer. Això volia dir que QUALSEVOL clic o
+  // toc a la pàgina —encara que no estiguessis en mode de control, encara
+  // que fos sobre el botó de "Silenciar" o sobre el registre— es
+  // reenviava al Host i s'executava allà. En mòbil, a més, un simple tap
+  // dispara també un `mousedown`/`mouseup` sintètic del navegador, així
+  // que "només mirar" la pantalla petita ja movia i clicava al PC real
+  // —d'aquí que s'obrissin programes sols. Ara el ratolí/tàctil només
+  // s'enganxa a `targetRef` (normalment el propi `<canvas>` del vídeo),
+  // mai a la resta de la interfície. El teclat es manté sempre a
+  // `window` (no té "element objectiu" natural i un `<canvas>` no rep
+  // esdeveniments de teclat sense `tabindex`).
+  targetRef?: React.RefObject<HTMLElement | null>;
 }
 
 /**
- * Captura inputs de teclado, ratón y mando en el WebView del guest y los
- * entrega al callback `onInput` para que se envíen por el DataChannel.
- * Se activa solo cuando `enabled` es true (cuando el guest está conectado
- * y el DataChannel está abierto), para no interceptar inputs en el resto
- * de la navegación normal de la app.
+ * Captura inputs de teclat, ratolí, tàctil i comandament, i els entrega al
+ * callback `onInput` perquè s'enviïn pel DataChannel. Només actiu quan
+ * `enabled` és cert — i, per a ratolí/tàctil, només dins de `targetRef`
+ * (mai a la resta de botons/controls de la pàgina).
  */
-export function useInputCapture({ enabled, onInput }: UseInputCaptureOptions) {
+export function useInputCapture({ enabled, onInput, targetRef }: UseInputCaptureOptions) {
   const onInputRef = useRef(onInput);
   useEffect(() => { onInputRef.current = onInput; }, [onInput]);
 
@@ -22,6 +34,7 @@ export function useInputCapture({ enabled, onInput }: UseInputCaptureOptions) {
 
   useEffect(() => {
     if (!enabled) return;
+    const target: HTMLElement = targetRef?.current ?? (document.body as unknown as HTMLElement);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
@@ -55,12 +68,53 @@ export function useInputCapture({ enabled, onInput }: UseInputCaptureOptions) {
       onInputRef.current({ t: "mw", dy: e.deltaY });
     };
 
+    // 📱 Tàctil real (abans no existia cap gestor propi): un dit avall
+    // equival a botó esquerre avall, i el moviment es tradueix en els
+    // mateixos deltes relatius `dx/dy` que fa servir el ratolí. Amb
+    // `preventDefault()` evitem que el navegador generi A MÉS els
+    // `mousedown`/`mousemove`/`mouseup` sintètics de compatibilitat
+    // (que, si no, arribarien duplicats pels gestors de ratolí de dalt).
+    let touchActive = false;
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const t = e.touches[0];
+      if (!t) return;
+      lastX = t.clientX;
+      lastY = t.clientY;
+      touchActive = true;
+      onInputRef.current({ t: "mb", btn: 0, down: true });
+    };
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!touchActive) return;
+      const t = e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - lastX;
+      const dy = t.clientY - lastY;
+      lastX = t.clientX;
+      lastY = t.clientY;
+      onInputRef.current({ t: "mm", x: t.clientX, y: t.clientY, dx, dy });
+    };
+    const handleTouchEnd = (e: TouchEvent) => {
+      e.preventDefault();
+      if (!touchActive) return;
+      touchActive = false;
+      onInputRef.current({ t: "mb", btn: 0, down: false });
+    };
+
+    // ⌨️ El teclat SEMPRE a `window` (únic listener, mai duplicat amb el
+    // de `target`): no té sentit "escopar-lo" a un element concret.
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mousedown", handleMouseDown);
-    window.addEventListener("mouseup", handleMouseUp);
-    window.addEventListener("wheel", handleWheel, { passive: false });
+    // 🖱️📱 Ratolí i tàctil NOMÉS dins de `target` (el canvas del vídeo).
+    target.addEventListener("mousemove", handleMouseMove as EventListener);
+    target.addEventListener("mousedown", handleMouseDown as EventListener);
+    target.addEventListener("mouseup", handleMouseUp as EventListener);
+    target.addEventListener("wheel", handleWheel as EventListener, { passive: false });
+    target.addEventListener("touchstart", handleTouchStart as EventListener, { passive: false });
+    target.addEventListener("touchmove", handleTouchMove as EventListener, { passive: false });
+    target.addEventListener("touchend", handleTouchEnd as EventListener, { passive: false });
+    target.addEventListener("touchcancel", handleTouchEnd as EventListener, { passive: false });
 
     // Polling del gamepad: la Gamepad API no emite eventos, hay que
     // leer el estado en cada frame y mandarlo solo si hay cambios.
@@ -98,13 +152,17 @@ export function useInputCapture({ enabled, onInput }: UseInputCaptureOptions) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mousedown", handleMouseDown);
-      window.removeEventListener("mouseup", handleMouseUp);
-      window.removeEventListener("wheel", handleWheel);
+      target.removeEventListener("mousemove", handleMouseMove as EventListener);
+      target.removeEventListener("mousedown", handleMouseDown as EventListener);
+      target.removeEventListener("mouseup", handleMouseUp as EventListener);
+      target.removeEventListener("wheel", handleWheel as EventListener);
+      target.removeEventListener("touchstart", handleTouchStart as EventListener);
+      target.removeEventListener("touchmove", handleTouchMove as EventListener);
+      target.removeEventListener("touchend", handleTouchEnd as EventListener);
+      target.removeEventListener("touchcancel", handleTouchEnd as EventListener);
       if (animFrameRef.current !== null) {
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [enabled]);
+  }, [enabled, targetRef]);
 }
