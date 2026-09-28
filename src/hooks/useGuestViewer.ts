@@ -317,7 +317,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         droppingUntilKeyRef.current = false;
       } else if (droppingUntilKeyRef.current) {
         return;
-      } else if (videoDecoderRef.current.decodeQueueSize > 3) {
+      } else if (videoDecoderRef.current.decodeQueueSize > 8) {
         droppingUntilKeyRef.current = true;
         lossesRef.current += 1;
         kfReqRef.current += 1;
