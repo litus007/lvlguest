@@ -53,6 +53,50 @@ function IconButton({
   );
 }
 
+// 💬 Panell de xat compacte (tècnic ↔ Host).
+function ChatPanel({
+  messages,
+  input,
+  onInput,
+  onSend,
+  className = "",
+}: {
+  messages: { from: "me" | "host"; text: string }[];
+  input: string;
+  onInput: (v: string) => void;
+  onSend: () => void;
+  className?: string;
+}) {
+  return (
+    <div className={`bg-black/85 border border-cyan-400/30 chamfer-sm p-2 flex flex-col gap-2 ${className}`}>
+      <div className="max-h-40 overflow-y-auto flex flex-col gap-1 text-xs">
+        {messages.length === 0 && <p className="text-gray-500 text-center">Cap missatge encara.</p>}
+        {messages.map((m, i) => (
+          <p
+            key={i}
+            className={`px-2 py-1 rounded-lg max-w-[85%] ${
+              m.from === "me" ? "self-end bg-cyan-500/25 text-cyan-100" : "self-start bg-white/10 text-gray-200"
+            }`}
+          >
+            {m.text}
+          </p>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          value={input}
+          onChange={(e) => onInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onSend()}
+          placeholder="Escriu un missatge..."
+          maxLength={500}
+          className="flex-1 bg-black/60 border border-white/15 rounded-full px-3 py-1.5 text-xs text-white"
+        />
+        <IconButton icon="➤" title="Enviar missatge" onClick={onSend} size="sm" active accent="cyan" />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [roomCodeInput, setRoomCodeInput] = useState("");
   const [log, setLog] = useState<string[]>([]);
@@ -73,6 +117,14 @@ export default function App() {
   // amagar del tot per deixar la imatge neta — només queda l'interruptor
   // (👁️/⬍) flotant, sempre visible, per tornar-los a mostrar.
   const [hudVisible, setHudVisible] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const handleSendChat = () => {
+    const text = chatInput.trim();
+    if (!text) return;
+    sendChat(text);
+    setChatInput("");
+  };
   const isTouchDevice = typeof window !== "undefined" && (navigator.maxTouchPoints > 0 || "ontouchstart" in window);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -81,7 +133,7 @@ export default function App() {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect, sendInput, stats: connectionStats, diagSnapshot, requestDiagRefresh, sendFileToHost } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput, stats: connectionStats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, sendFileToHost } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
 
   // 🖱️🩺 Fix de seguretat + suport a l'Assistència Remota: el ratolí/tàctil
   // ara només s'enganxa al `<canvas>` (mai a la resta de la pàgina), i
@@ -223,6 +275,8 @@ export default function App() {
     setSendProgress(null);
     setSendError(null);
     setDiagLoading(false);
+    setChatOpen(false);
+    setChatInput("");
   };
 
   // Un cop arriben estadístiques noves, treiem l'indicador de "Consultant...".
@@ -481,6 +535,16 @@ export default function App() {
 
             {/* 🩺 Controls exclusius de l'Assistència Remota: estadístiques
                 sota demanda i enviament d'un fitxer al Host. */}
+            {appMode === "assist" && hudVisible && chatOpen && (
+              <ChatPanel
+                className="absolute bottom-16 left-3 z-30 w-64"
+                messages={chatMessages}
+                input={chatInput}
+                onInput={setChatInput}
+                onSend={handleSendChat}
+              />
+            )}
+
             {appMode === "assist" && hudVisible && (
               <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-end gap-2 z-20">
                 <IconButton
@@ -491,6 +555,7 @@ export default function App() {
                   active={diagLoading}
                   accent="cyan"
                 />
+                <IconButton icon="💬" title="Xat amb el Host" onClick={() => setChatOpen((o) => !o)} active={chatOpen} accent="cyan" />
                 <label title="Tria un arxiu per enviar al Host">
                   <span
                     className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-200 backdrop-blur-md shadow-md cursor-pointer ${
@@ -562,6 +627,12 @@ export default function App() {
                 />
                 <div className="ml-1">
                   <PingBadge rttMs={connectionStats.rttMs} packetsLost={connectionStats.packetsLost} />
+                  <span
+                    className="ml-2 text-[10px] font-mono text-gray-300 bg-black/50 rounded-full px-2 py-1"
+                    title="Frames rebuts/s · frames pintats/s · pèrdues/s · keyframes demanats/s"
+                  >
+                    📥{videoStats.rxFps} 🖼️{videoStats.decFps} ⚠️{videoStats.losses} 🔑{videoStats.kfRequests}
+                  </span>
                 </div>
               </div>
             )}

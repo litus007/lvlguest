@@ -67,6 +67,29 @@ interface UseGuestViewerOptions {
  */
 export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerOptions) {
   const [phase, setPhase] = useState<ViewerPhase>("idle");
+  // 📊 Diagnòstic de vídeo al Guest: separa "no arriba" (xarxa) de "arriba
+  // però no es pinta" (descodificació) per saber on és el coll d'ampolla.
+  const [chatMessages, setChatMessages] = useState<{ from: "me" | "host"; text: string }[]>([]);
+  const rxFramesRef = useRef(0);
+  const decFramesRef = useRef(0);
+  const lossesRef = useRef(0);
+  const kfReqRef = useRef(0);
+  const [videoStats, setVideoStats] = useState({ rxFps: 0, decFps: 0, losses: 0, kfRequests: 0 });
+  useEffect(() => {
+    const id = setInterval(() => {
+      setVideoStats({
+        rxFps: rxFramesRef.current,
+        decFps: decFramesRef.current,
+        losses: lossesRef.current,
+        kfRequests: kfReqRef.current,
+      });
+      rxFramesRef.current = 0;
+      decFramesRef.current = 0;
+      lossesRef.current = 0;
+      kfReqRef.current = 0;
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
   const [stats, setStats] = useState<ConnectionStats>({ rttMs: null, packetsLost: null, jitterMs: null });
   // 🩺 Panell de diagnòstic del Host (mode "Manteniment Remot") — arriba un
   // únic cop pel canal fiable "diag" en connectar.
@@ -241,6 +264,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       if (!videoDecoderRef.current) {
         videoDecoderRef.current = new VideoDecoder({
           output: (videoFrame) => {
+            decFramesRef.current += 1;
             const canvas = canvasRef.current;
             const ctx = canvas?.getContext("2d", { alpha: false, desynchronized: true });
             if (canvas && ctx) {
@@ -361,6 +385,17 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
       if (dc.label === "files") {
         filesChannelRef.current = dc;
+        dc.onmessage = (msg) => {
+          if (typeof msg.data !== "string") return;
+          try {
+            const parsed = JSON.parse(msg.data);
+            if (parsed.type === "chat" && typeof parsed.text === "string") {
+              setChatMessages((prev) => [...prev.slice(-100), { from: "host", text: parsed.text }]);
+            }
+          } catch {
+            // missatge no JSON: s'ignora
+          }
+        };
         dc.onopen = () => onLog("📁 Canal de fitxers obert.");
         dc.onclose = () => {
           if (filesChannelRef.current === dc) filesChannelRef.current = null;
@@ -381,9 +416,11 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       // frame sencer si en falta algun, en lloc de lliurar-lo corrupte.
       dc.binaryType = "arraybuffer";
       const push = createVideoReassembler({
-        onFrame: (frame) => handleVideoFrame(frame),
+        onFrame: (frame) => { rxFramesRef.current += 1; handleVideoFrame(frame); },
+        onLoss: () => { lossesRef.current += 1; },
         requestKeyframe: () => {
           const ic = inputChannelRef.current;
+          kfReqRef.current += 1;
           if (ic && ic.readyState === "open") ic.send(JSON.stringify({ t: "kf" }));
         },
       });
@@ -604,6 +641,14 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     []
   );
 
+  const sendChat = useCallback((text: string) => {
+    const dc = filesChannelRef.current;
+    if (dc && dc.readyState === "open") {
+      dc.send(JSON.stringify({ type: "chat", text }));
+      setChatMessages((prev) => [...prev.slice(-100), { from: "me", text }]);
+    }
+  }, []);
+
   const disconnect = useCallback(() => {
     if (failTimeoutRef.current) clearTimeout(failTimeoutRef.current);
     failTimeoutRef.current = null;
@@ -644,11 +689,12 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
     setPhase("idle");
     setStats({ rttMs: null, packetsLost: null, jitterMs: null });
+    setChatMessages([]);
     setDiagSnapshot(null);
     lanOnlyRef.current = false;
   }, []);
 
   useEffect(() => disconnect, [disconnect]);
 
-  return { phase, connect, disconnect, sendInput, stats, diagSnapshot, requestDiagRefresh, sendFileToHost };
+  return { phase, connect, disconnect, sendInput, stats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, sendFileToHost };
 }

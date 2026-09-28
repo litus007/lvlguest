@@ -31,9 +31,12 @@ export function isKeyFrameAnnexB(buf: Uint8Array): boolean {
 interface Options {
   onFrame: (frame: Uint8Array) => void;
   requestKeyframe: () => void;
+  // Cridat cada cop que es detecta pèrdua (tros perdut, salt de seqüència o
+  // frame caducat) — serveix per comptar-les a l'HUD de diagnòstic.
+  onLoss?: () => void;
 }
 
-export function createVideoReassembler({ onFrame, requestKeyframe }: Options) {
+export function createVideoReassembler({ onFrame, requestKeyframe, onLoss }: Options) {
   const pending = new Map<
     number,
     { chunks: (Uint8Array | undefined)[]; received: number; firstSeenAt: number }
@@ -44,6 +47,7 @@ export function createVideoReassembler({ onFrame, requestKeyframe }: Options) {
 
   const markBroken = () => {
     needKeyframe = true;
+    onLoss?.();
     const now = performance.now();
     if (now - lastRequestAt > KEYFRAME_REQUEST_COOLDOWN_MS) {
       lastRequestAt = now;
