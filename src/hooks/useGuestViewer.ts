@@ -70,6 +70,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   // 📊 Diagnòstic de vídeo al Guest: separa "no arriba" (xarxa) de "arriba
   // però no es pinta" (descodificació) per saber on és el coll d'ampolla.
   const [chatMessages, setChatMessages] = useState<{ from: "me" | "host"; text: string }[]>([]);
+  const droppingUntilKeyRef = useRef(false);
   const rxFramesRef = useRef(0);
   const decFramesRef = useRef(0);
   const lossesRef = useRef(0);
@@ -307,6 +308,22 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         } catch {
           return;
         }
+      }
+
+      // 🚦 Si el descodificador (mòbil lent) s'endarrereix, seguir-li donant
+      // frames només afegeix latència. Es descarten els deltes fins al proper
+      // keyframe (que es demana al Host un sol cop per episodi).
+      if (isKey) {
+        droppingUntilKeyRef.current = false;
+      } else if (droppingUntilKeyRef.current) {
+        return;
+      } else if (videoDecoderRef.current.decodeQueueSize > 3) {
+        droppingUntilKeyRef.current = true;
+        lossesRef.current += 1;
+        kfReqRef.current += 1;
+        const ic = inputChannelRef.current;
+        if (ic && ic.readyState === "open") ic.send(JSON.stringify({ t: "kf" }));
+        return;
       }
 
       try {
