@@ -17,6 +17,10 @@ interface UseInputCaptureOptions {
   // `window` (no té "element objectiu" natural i un `<canvas>` no rep
   // esdeveniments de teclat sense `tabindex`).
   targetRef?: React.RefObject<HTMLElement | null>;
+  // 🎯 "absolute": el punt tocat/clicat sobre la imatge es tradueix a la
+  // mateixa posició al Host (ideal per assistència i mòbil). "relative":
+  // deltes acumulats, necessari per a jocs amb càmera (FPS).
+  mouseMode?: "absolute" | "relative";
 }
 
 /**
@@ -25,7 +29,7 @@ interface UseInputCaptureOptions {
  * `enabled` és cert — i, per a ratolí/tàctil, només dins de `targetRef`
  * (mai a la resta de botons/controls de la pàgina).
  */
-export function useInputCapture({ enabled, onInput, targetRef }: UseInputCaptureOptions) {
+export function useInputCapture({ enabled, onInput, targetRef, mouseMode = "relative" }: UseInputCaptureOptions) {
   const onInputRef = useRef(onInput);
   useEffect(() => { onInputRef.current = onInput; }, [onInput]);
 
@@ -46,8 +50,30 @@ export function useInputCapture({ enabled, onInput, targetRef }: UseInputCapture
       onInputRef.current({ t: "ku", code: e.code });
     };
 
+    // Converteix coordenades de pantalla a posició normalitzada dins la
+    // imatge REAL del vídeo (descomptant les barres negres d'`object-contain`).
+    const toNormalized = (clientX: number, clientY: number) => {
+      const rect = target.getBoundingClientRect();
+      const cv = target as unknown as HTMLCanvasElement;
+      const vw = cv.width || rect.width;
+      const vh = cv.height || rect.height;
+      const scale = Math.min(rect.width / vw, rect.height / vh);
+      const drawnW = vw * scale;
+      const drawnH = vh * scale;
+      const offX = (rect.width - drawnW) / 2;
+      const offY = (rect.height - drawnH) / 2;
+      const nx = (clientX - rect.left - offX) / drawnW;
+      const ny = (clientY - rect.top - offY) / drawnH;
+      return { nx: Math.min(1, Math.max(0, nx)), ny: Math.min(1, Math.max(0, ny)) };
+    };
+    const sendAbs = (clientX: number, clientY: number) => {
+      const { nx, ny } = toNormalized(clientX, clientY);
+      onInputRef.current({ t: "ma", nx, ny });
+    };
+
     let lastX = 0, lastY = 0;
     const handleMouseMove = (e: MouseEvent) => {
+      if (mouseMode === "absolute") { sendAbs(e.clientX, e.clientY); return; }
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX;
@@ -56,6 +82,7 @@ export function useInputCapture({ enabled, onInput, targetRef }: UseInputCapture
     };
 
     const handleMouseDown = (e: MouseEvent) => {
+      if (mouseMode === "absolute") sendAbs(e.clientX, e.clientY);
       onInputRef.current({ t: "mb", btn: e.button as 0 | 1 | 2, down: true });
     };
 
@@ -82,6 +109,7 @@ export function useInputCapture({ enabled, onInput, targetRef }: UseInputCapture
       lastX = t.clientX;
       lastY = t.clientY;
       touchActive = true;
+      if (mouseMode === "absolute") sendAbs(t.clientX, t.clientY);
       onInputRef.current({ t: "mb", btn: 0, down: true });
     };
     const handleTouchMove = (e: TouchEvent) => {
@@ -89,6 +117,7 @@ export function useInputCapture({ enabled, onInput, targetRef }: UseInputCapture
       if (!touchActive) return;
       const t = e.touches[0];
       if (!t) return;
+      if (mouseMode === "absolute") { sendAbs(t.clientX, t.clientY); return; }
       const dx = t.clientX - lastX;
       const dy = t.clientY - lastY;
       lastX = t.clientX;
@@ -164,5 +193,5 @@ export function useInputCapture({ enabled, onInput, targetRef }: UseInputCapture
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [enabled, targetRef]);
+  }, [enabled, targetRef, mouseMode]);
 }

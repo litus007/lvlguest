@@ -7,6 +7,7 @@ export type InputMessage =
   | { t: "kd"; code: string }                    // keydown: código de tecla (ej: "KeyA", "Space")
   | { t: "ku"; code: string }                    // keyup
   | { t: "mm"; x: number; y: number; dx: number; dy: number } // mousemove: posición + delta
+  | { t: "ma"; nx: number; ny: number }          // mouse absolut: posició normalitzada 0..1 sobre la imatge
   | { t: "mb"; btn: 0 | 1 | 2; down: boolean }  // mousebutton: botón + estado
   | { t: "mw"; dy: number }                      // mousewheel: delta vertical
   | {                                             // gamepad: estado completo del mando

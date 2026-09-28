@@ -99,6 +99,7 @@ export default function App() {
     enabled: phase === "connected" && controlActive,
     onInput: sendInput,
     targetRef: canvasRef,
+    mouseMode: appMode === "assist" ? "absolute" : "relative",
   });
 
   // Detecció visible de comandaments — la Gamepad API només informa amb
