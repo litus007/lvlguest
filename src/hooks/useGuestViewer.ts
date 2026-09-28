@@ -1,3 +1,4 @@
+import { createVideoReassembler } from "./videoReassembler";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
@@ -241,7 +242,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         videoDecoderRef.current = new VideoDecoder({
           output: (videoFrame) => {
             const canvas = canvasRef.current;
-            const ctx = canvas?.getContext("2d");
+            const ctx = canvas?.getContext("2d", { alpha: false, desynchronized: true });
             if (canvas && ctx) {
               if (canvas.width !== videoFrame.displayWidth || canvas.height !== videoFrame.displayHeight) {
                 canvas.width = videoFrame.displayWidth;
@@ -379,61 +380,15 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       // total_chunks u16 LE): reordenem per `chunk_index` i descartem el
       // frame sencer si en falta algun, en lloc de lliurar-lo corrupte.
       dc.binaryType = "arraybuffer";
-      const HEADER_BYTES = 8;
-      const pendingFrames = new Map<
-        number,
-        { chunks: (Uint8Array | undefined)[]; received: number; firstSeenAt: number }
-      >();
-      const MAX_PENDING_FRAMES = 6;
-      const FRAME_TIMEOUT_MS = 700;
-
+      const push = createVideoReassembler({
+        onFrame: (frame) => handleVideoFrame(frame),
+        requestKeyframe: () => {
+          const ic = inputChannelRef.current;
+          if (ic && ic.readyState === "open") ic.send(JSON.stringify({ t: "kf" }));
+        },
+      });
       dc.onopen = () => onLog("🎬 Canal de vídeo obert.");
-      dc.onmessage = (msg) => {
-        const buf = new Uint8Array(msg.data as ArrayBuffer);
-        if (buf.length < HEADER_BYTES) return;
-        const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-        const frameId = view.getUint32(0, true);
-        const chunkIndex = view.getUint16(4, true);
-        const totalChunks = view.getUint16(6, true);
-        const payload = buf.subarray(HEADER_BYTES);
-
-        if (totalChunks === 0 || chunkIndex >= totalChunks) return;
-
-        let entry = pendingFrames.get(frameId);
-        if (!entry) {
-          entry = { chunks: new Array(totalChunks), received: 0, firstSeenAt: performance.now() };
-          pendingFrames.set(frameId, entry);
-          if (pendingFrames.size > MAX_PENDING_FRAMES) {
-            const oldestKey = [...pendingFrames.keys()].sort((a, b) => a - b)[0];
-            pendingFrames.delete(oldestKey);
-          }
-        }
-
-        if (!entry.chunks[chunkIndex]) {
-          entry.chunks[chunkIndex] = payload;
-          entry.received += 1;
-        }
-
-        if (entry.received === totalChunks) {
-          pendingFrames.delete(frameId);
-          const totalLen = entry.chunks.reduce((acc, p) => acc + (p?.length ?? 0), 0);
-          const frame = new Uint8Array(totalLen);
-          let offset = 0;
-          for (const p of entry.chunks) {
-            if (!p) return;
-            frame.set(p, offset);
-            offset += p.length;
-          }
-          handleVideoFrame(frame);
-        }
-
-        const now = performance.now();
-        for (const [id, e] of pendingFrames) {
-          if (now - e.firstSeenAt > FRAME_TIMEOUT_MS) {
-            pendingFrames.delete(id);
-          }
-        }
-      };
+      dc.onmessage = (msg) => push(new Uint8Array(msg.data as ArrayBuffer));
     };
 
     pc.onicecandidate = (event) => {
