@@ -113,6 +113,7 @@ export default function App() {
   const [sendProgress, setSendProgress] = useState<number | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [diagLoading, setDiagLoading] = useState(false);
+  const [quickActionBusy, setQuickActionBusy] = useState<string | null>(null);
   // 🎛️ HUD amagable: amb els botons ara rodons i sense text, es poden
   // amagar del tot per deixar la imatge neta — només queda l'interruptor
   // (👁️/⬍) flotant, sempre visible, per tornar-los a mostrar.
@@ -133,7 +134,7 @@ export default function App() {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect, sendInput, stats: connectionStats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, sendFileToHost } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput, stats: connectionStats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, requestQuickAction, quickActionMsg, sendFileToHost } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
 
   // 🖱️🩺 Fix de seguretat + suport a l'Assistència Remota: el ratolí/tàctil
   // ara només s'enganxa al `<canvas>` (mai a la resta de la pàgina), i
@@ -283,6 +284,14 @@ export default function App() {
   useEffect(() => {
     if (diagSnapshot) setDiagLoading(false);
   }, [diagSnapshot]);
+  useEffect(() => {
+    if (quickActionMsg) setQuickActionBusy(null);
+  }, [quickActionMsg]);
+
+  const handleQuickAction = (action: "clean_temp_files" | "lock_screen") => {
+    setQuickActionBusy(action);
+    requestQuickAction(action);
+  };
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden flex flex-col">
@@ -514,9 +523,38 @@ export default function App() {
                     💾 {d.mount_point}: {d.available_gb.toFixed(1)} GB lliures ({d.used_percent.toFixed(0)}% ple)
                   </p>
                 ))}
+                {((diagSnapshot as any).top_processes ?? []).slice(0, 5).map((pr: any) => (
+                  <p key={pr.pid}>⚙️ {pr.name}: {Number(pr.cpu_percent ?? 0).toFixed(0)}% CPU · {Number(pr.memory_mb ?? 0).toFixed(0)} MB</p>
+                ))}
+                {((diagSnapshot as any).networks ?? []).map((n: any) => (
+                  <p key={n.interface}>
+                    📶 {n.interface}: ↓{Number(n.received_kbps ?? 0).toFixed(0)} ↑{Number(n.transmitted_kbps ?? 0).toFixed(0)} kbps
+                  </p>
+                ))}
                 {((diagSnapshot as any).warnings ?? []).map((w: string, i: number) => (
                   <p key={i} className="text-red-300">{w}</p>
                 ))}
+                <div className="flex gap-2 pt-1">
+                  <IconButton
+                    icon="🧹"
+                    title="Buida temporals del Host"
+                    onClick={() => handleQuickAction("clean_temp_files")}
+                    disabled={quickActionBusy !== null}
+                    active={quickActionBusy === "clean_temp_files"}
+                    size="sm"
+                    accent="cyan"
+                  />
+                  <IconButton
+                    icon="🔒"
+                    title="Bloqueja la pantalla del Host"
+                    onClick={() => handleQuickAction("lock_screen")}
+                    disabled={quickActionBusy !== null}
+                    active={quickActionBusy === "lock_screen"}
+                    size="sm"
+                    accent="cyan"
+                  />
+                </div>
+                {quickActionMsg && <p className="text-emerald-300">{quickActionMsg}</p>}
               </div>
             )}
 

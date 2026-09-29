@@ -70,6 +70,8 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   // 📊 Diagnòstic de vídeo al Guest: separa "no arriba" (xarxa) de "arriba
   // però no es pinta" (descodificació) per saber on és el coll d'ampolla.
   const [chatMessages, setChatMessages] = useState<{ from: "me" | "host"; text: string }[]>([]);
+  const [quickActionMsg, setQuickActionMsg] = useState<string | null>(null);
+  const incomingFileRef = useRef<{ name: string; size: number; chunks: Uint8Array[] } | null>(null);
   const droppingUntilKeyRef = useRef(false);
   const rxFramesRef = useRef(0);
   const decFramesRef = useRef(0);
@@ -403,11 +405,39 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       if (dc.label === "files") {
         filesChannelRef.current = dc;
         dc.onmessage = (msg) => {
-          if (typeof msg.data !== "string") return;
+          if (typeof msg.data !== "string") {
+            // 📥 Tros binari d'un fitxer que ens envia el Host.
+            const incoming = incomingFileRef.current;
+            if (incoming) incoming.chunks.push(new Uint8Array(msg.data as ArrayBuffer));
+            return;
+          }
           try {
             const parsed = JSON.parse(msg.data);
             if (parsed.type === "chat" && typeof parsed.text === "string") {
               setChatMessages((prev) => [...prev.slice(-100), { from: "host", text: parsed.text }]);
+            } else if (parsed.type === "quick_action_result") {
+              setQuickActionMsg(parsed.message);
+              onLog(parsed.message);
+            } else if (parsed.type === "start" && typeof parsed.name === "string") {
+              incomingFileRef.current = { name: parsed.name, size: parsed.size ?? 0, chunks: [] };
+            } else if (parsed.type === "end") {
+              const incoming = incomingFileRef.current;
+              incomingFileRef.current = null;
+              if (incoming) {
+                // 🌐 Al navegador no podem "desar al disc": oferim una
+                // baixada normal (Blob + enllaç temporal), tal com faria
+                // qualsevol pàgina en descarregar un fitxer.
+                const blob = new Blob(incoming.chunks as BlobPart[]);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = incoming.name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 30_000);
+                onLog(`📥 "${incoming.name}" rebut del Host — descarregant...`);
+              }
             }
           } catch {
             // missatge no JSON: s'ignora
@@ -658,6 +688,15 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     []
   );
 
+  // ⚡ Demana al Host que executi una acció ràpida.
+  const requestQuickAction = useCallback((action: "clean_temp_files" | "lock_screen") => {
+    const dc = filesChannelRef.current;
+    if (dc && dc.readyState === "open") {
+      setQuickActionMsg(null);
+      dc.send(JSON.stringify({ type: "quick_action", action }));
+    }
+  }, []);
+
   const sendChat = useCallback((text: string) => {
     const dc = filesChannelRef.current;
     if (dc && dc.readyState === "open") {
@@ -707,11 +746,13 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     setPhase("idle");
     setStats({ rttMs: null, packetsLost: null, jitterMs: null });
     setChatMessages([]);
+    setQuickActionMsg(null);
+    incomingFileRef.current = null;
     setDiagSnapshot(null);
     lanOnlyRef.current = false;
   }, []);
 
   useEffect(() => disconnect, [disconnect]);
 
-  return { phase, connect, disconnect, sendInput, stats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, sendFileToHost };
+  return { phase, connect, disconnect, sendInput, stats, videoStats, chatMessages, sendChat, requestQuickAction, quickActionMsg, diagSnapshot, requestDiagRefresh, sendFileToHost };
 }
