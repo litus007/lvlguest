@@ -1,4 +1,5 @@
 import { createVideoReassembler } from "./videoReassembler";
+import { createAudioReorderBuffer } from "./audioReassembler";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
@@ -376,11 +377,15 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
       if (dc.label === "audio") {
         dc.binaryType = "arraybuffer";
+        // 🛡️ FIX DE QUALITAT ("el so era horrible"): aquest canal és
+        // `ordered: false` — sense reordenar, dos paquets que es creuin
+        // sonen en l'ordre equivocat. Vegis `audioReassembler.ts`.
+        const pushAudio = createAudioReorderBuffer((payload) => handleAudioPacket(payload));
         dc.onopen = () => onLog("🔊 Canal d'àudio obert.");
         dc.onmessage = (msg) => {
           const buf = new Uint8Array(msg.data as ArrayBuffer);
           if (buf.length === 0) return;
-          handleAudioPacket(buf);
+          pushAudio(buf);
         };
         return;
       }
