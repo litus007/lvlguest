@@ -417,15 +417,25 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
       if (dc.label === "mic") {
         micChannelRef.current = dc;
+        // 🛡️ FIX: sense això el navegador lliura `Blob` (el valor per
+        // defecte als canals de dades) i `new Uint8Array(blob)` queda buit:
+        // la veu rebuda s'ignorava en silenci. Vídeo i àudio ja ho feien.
+        dc.binaryType = "arraybuffer";
         const pushMic = createAudioReorderBuffer((payload) => {
           const ctx = ensureAudioContext();
-          const gain = masterGainRef.current;
-          if (!ctx || !gain) return;
+          if (!ctx) return;
+          if (ctx.state === "suspended") ctx.resume().catch(() => {});
           if (!micPlaybackRef.current) {
-            micPlaybackRef.current = createVoicePlayback(ctx, gain, 1);
+            // 🛡️ La veu va DIRECTA a la sortida, no pel guany mestre: el
+            // botó 🔊 només silencia el so del joc/sistema. Abans, a
+            // Assistència (sense aquest botó i amb `isMuted` = true) la
+            // veu del Host quedava a volum 0. El Host (Rust) codifica en
+            // estèreo, així que el descodificador també és de 2 canals.
+            micPlaybackRef.current = createVoicePlayback(ctx, ctx.destination, 2);
           }
           micPlaybackRef.current.feedPacket(payload);
         });
+        dc.onopen = () => onLog("🎤 Canal de veu obert.");
         dc.onmessage = (msg) => {
           const buf = new Uint8Array(msg.data as ArrayBuffer);
           if (buf.length > 0) pushMic(buf);
@@ -558,7 +568,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     };
 
     return pc;
-  }, [handleAudioPacket, handleVideoFrame, onLog, sendSignal]);
+  }, [ensureAudioContext, handleAudioPacket, handleVideoFrame, onLog, sendSignal]);
 
   const applyOffer = useCallback(
     async (sdp: string) => {
@@ -638,7 +648,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   }, []);
 
   const connect = useCallback(
-    (roomCode: string, lanOnly: boolean = false, mode: "game" | "assist" = "game") => {
+    (roomCode: string, lanOnly: boolean = false, mode: "game" | "assist" | "call" = "game") => {
       const code = roomCode.trim().toUpperCase();
       if (!code) return;
 
@@ -649,8 +659,15 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
       // 🩺 Mode "Assistència Remota": mateix espai de noms que fa servir el
       // Host (`webrtc_assist_create_offer` + `assist-presence:<codi>`) per
       // no col·lidir mai amb una sala de "Compartir Joc" amb el mateix codi.
-      const signalRoomId = mode === "assist" ? `assist:${code}` : code;
-      const presenceRoomName = mode === "assist" ? `assist-presence:${code}` : `streaming-presence:${code}`;
+      // 📞 Mode "Trucada Directa": mateixos noms que `CallView.tsx` a l'app
+      // d'escriptori (`call:<codi>` + `call-presence:<codi>`).
+      const signalRoomId = mode === "assist" ? `assist:${code}` : mode === "call" ? `call:${code}` : code;
+      const presenceRoomName =
+        mode === "assist"
+          ? `assist-presence:${code}`
+          : mode === "call"
+          ? `call-presence:${code}`
+          : `streaming-presence:${code}`;
 
       const signalChannel = supabase
         .channel(`webrtc-signal:${signalRoomId}`, { config: { broadcast: { self: false } } })

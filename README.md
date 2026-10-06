@@ -29,6 +29,34 @@ l'app d'escriptori, perquè capturar pantalla i injectar inputs al
 sistema operatiu no es pot fer des d'una pàgina web — però per
 **jugar-hi en remot**, aquesta pàgina n'hi ha prou.
 
+## Requisit: sempre un Host d'escriptori
+
+Aquesta web és **només el costat Guest**. Les tres eines necessiten que
+l'altra banda tingui l'app d'escriptori LVCLITS oberta com a **Host**
+(és qui captura pantalla/àudio/micròfon amb codi natiu, crea l'oferta
+WebRTC i obre les sales). **Cap eina funciona entre dues webs.** La
+pàgina ho recorda amb un avís flotant (es pot tancar i es reobre amb el
+botó ℹ️ de la capçalera).
+
+## Eines disponibles
+
+Un selector a la pantalla d'inici tria l'eina; cada una fa servir el seu
+propi espai de noms de senyalització, així que mai col·lideixen encara
+que comparteixin codi:
+
+| Eina | Sala de senyalització | Presència |
+|------|----------------------|-----------|
+| 🎮 Jugar | `<codi>` | `streaming-presence:<codi>` |
+| 🩺 Assistència | `assist:<codi>` | `assist-presence:<codi>` |
+| 📞 Trucada | `call:<codi>` | `call-presence:<codi>` |
+
+**📞 Trucada Directa** és la més lleugera: només veu (canal de dades
+`mic`, Opus amb capçalera de seqüència de 4 bytes). Aquesta pàgina només
+pot **unir-se** a una trucada oberta des de l'app d'escriptori; per
+obrir-ne una cal l'app. Sentir l'altra banda és automàtic; el botó del
+micròfon només controla l'enviament. Cal Chrome o Edge per enviar veu
+(`MediaStreamTrackProcessor` + `AudioEncoder`).
+
 ## Per què és possible
 
 El costat "Guest" de l'app d'escriptori ja és WebRTC 100% estàndard de

@@ -11,6 +11,9 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+// ℹ️ Avís "això és només el Guest": un cop tancat, es recorda al navegador.
+const HOST_NOTICE_KEY = "lvclits-host-notice-dismissed";
+
 // 🔘 Botó rodó amb icona, sense text — la unitat visual de tot el HUD
 // sobre el vídeo. `active` pinta l'accent de color quan l'estat és "on".
 function IconButton({
@@ -108,6 +111,21 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showVirtualPad, setShowVirtualPad] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  const [showHostNotice, setShowHostNotice] = useState(() => {
+    try {
+      return localStorage.getItem(HOST_NOTICE_KEY) !== "1";
+    } catch {
+      return true;
+    }
+  });
+  const dismissHostNotice = () => {
+    setShowHostNotice(false);
+    try {
+      localStorage.setItem(HOST_NOTICE_KEY, "1");
+    } catch {
+      /* sense emmagatzematge: simplement reapareixerà en recarregar */
+    }
+  };
   // 📁 Assistència Remota: fitxer a enviar al Host + progrés d'enviament.
   const [fileToSend, setFileToSend] = useState<File | null>(null);
   const [sendProgress, setSendProgress] = useState<number | null>(null);
@@ -143,7 +161,9 @@ export default function App() {
   // control automàticament; també es pot activar/desactivar a mà amb el
   // botó "🖱️ Control" per qui no vulgui/pugui fer servir pantalla completa.
   const [controlActive, setControlActive] = useState(false);
-  const [appMode, setAppMode] = useState<"game" | "assist">("game");
+  const [appMode, setAppMode] = useState<"game" | "assist" | "call">("game");
+  // 🎨 Color d'identitat de cada eina: 🎮 taronja · 🩺 cian · 📞 verd.
+  const frameColor = appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
 
   // Envia teclat, ratolí i comandament al Host pel canal "inputs". Ratolí i
   // tàctil escopats al `<canvas>` i només actius amb `controlActive` —
@@ -328,6 +348,20 @@ export default function App() {
               🎮 {gamepadName ? "Comandament actiu" : "Sense comandament"}
             </div>
           )}
+          {phase !== "connected" && (
+            <button
+              onClick={() => (showHostNotice ? dismissHostNotice() : setShowHostNotice(true))}
+              title="Per què cal l'app d'escriptori?"
+              aria-label="Per què cal l'app d'escriptori?"
+              className={`w-7 h-7 rounded-full flex items-center justify-center text-xs border transition-colors duration-200 ${
+                showHostNotice
+                  ? "text-cyan-200 bg-cyan-500/20 border-cyan-400/40"
+                  : "text-gray-400 bg-white/5 border-white/10 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              ℹ️
+            </button>
+          )}
           {!installed && installEvent && (
             <button
               onClick={handleInstall}
@@ -336,9 +370,9 @@ export default function App() {
               ⬇ Instal·lar app
             </button>
           )}
-          <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest ${appMode === "assist" ? "text-cyan-400" : "text-gray-400"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${appMode === "assist" ? "bg-cyan-400" : "bg-orange-400"}`} />
-            {appMode === "assist" ? "Sistema 03 · Assistència" : "Sistema 02 · Streaming"}
+          <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest ${appMode === "call" ? "text-emerald-400" : appMode === "assist" ? "text-cyan-400" : "text-gray-400"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${appMode === "call" ? "bg-emerald-400" : appMode === "assist" ? "bg-cyan-400" : "bg-orange-400"}`} />
+            {appMode === "call" ? "Sistema 04 · Trucada" : appMode === "assist" ? "Sistema 03 · Assistència" : "Sistema 02 · Streaming"}
           </div>
         </div>
       </div>
@@ -366,16 +400,30 @@ export default function App() {
                   appMode === "assist" ? "bg-cyan-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
                 }`}
               >
-                🩺 Assistència Remota
+                🩺 Assistència
+              </button>
+              <button
+                onClick={() => setAppMode("call")}
+                disabled={phase === "searching" || phase === "negotiating"}
+                className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
+                  appMode === "call" ? "bg-emerald-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
+                }`}
+              >
+                📞 Trucada
               </button>
             </div>
 
             <div className="text-center mb-8">
-              <span className={`text-xs uppercase tracking-widest font-semibold ${appMode === "assist" ? "text-cyan-300/80" : "text-orange-300/80"}`}>
-                {appMode === "assist" ? "🩺 Suport tècnic" : "🎮 Joc remot"}
+              <span className={`text-xs uppercase tracking-widest font-semibold ${appMode === "call" ? "text-emerald-300/80" : appMode === "assist" ? "text-cyan-300/80" : "text-orange-300/80"}`}>
+                {appMode === "call" ? "📞 Només veu" : appMode === "assist" ? "🩺 Suport tècnic" : "🎮 Joc remot"}
               </span>
               <h1 className="text-4xl font-extrabold text-white tracking-tight mt-2">
-                {appMode === "assist" ? (
+                {appMode === "call" ? (
+                  <>
+                    Trucada{" "}
+                    <span className="text-emerald-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.4)]">directa</span>
+                  </>
+                ) : appMode === "assist" ? (
                   <>
                     Assistència{" "}
                     <span className="text-cyan-400 drop-shadow-[0_0_20px_rgba(34,211,238,0.4)]">remota</span>
@@ -388,24 +436,26 @@ export default function App() {
                 )}
               </h1>
               <p className="text-gray-400 text-sm mt-2">
-                {appMode === "assist"
+                {appMode === "call"
+                  ? "Introdueix el codi de la trucada que t'hagi donat l'altra persona des de l'app LVCLITS (eina \"Trucada Directa\"). Només veu: parlareu i us sentireu, res més es comparteix."
+                  : appMode === "assist"
                   ? "Introdueix el codi de sessió que et doni qui necessita ajuda. Un cop connectat, podràs veure la seva pantalla, controlar el teclat i el ratolí, consultar l'estat del seu PC i enviar-li arxius."
                   : "Introdueix el codi de sala. Un cop connectat, el teclat, el ratolí i el comandament controlaran el joc del Host."}
               </p>
             </div>
 
             <div className="relative animate-scale-in space-y-4 bg-white/5 border border-white/10 p-6 chamfer backdrop-blur-md shadow-xl">
-              <CornerFrame color={appMode === "assist" ? "cyan" : "orange"} />
+              <CornerFrame color={frameColor} />
               <input
                 type="text"
                 value={roomCodeInput}
                 onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
                 onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-                placeholder="EX: PARTIDA-RETRO"
+                placeholder={appMode === "call" ? "EX: A1B2C3" : "EX: PARTIDA-RETRO"}
                 maxLength={20}
                 disabled={phase === "searching" || phase === "negotiating"}
                 className={`w-full bg-black/40 border border-white/10 chamfer-sm px-4 py-3 text-white text-center text-xl font-mono tracking-widest placeholder:text-gray-700 focus:outline-none transition-all disabled:opacity-50 ${
-                  appMode === "assist" ? "focus:border-cyan-400/60" : "focus:border-orange-400/60"
+                  appMode === "call" ? "focus:border-emerald-400/60" : appMode === "assist" ? "focus:border-cyan-400/60" : "focus:border-orange-400/60"
                 }`}
               />
 
@@ -415,6 +465,8 @@ export default function App() {
                 className={`w-full font-bold py-3 chamfer-sm transition-all duration-300 hover:scale-[1.01] shadow-lg ${
                   phase === "searching" || phase === "negotiating"
                     ? "bg-red-500/80 hover:bg-red-500 text-white shadow-red-500/20"
+                    : appMode === "call"
+                    ? "bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:pointer-events-none text-black shadow-emerald-500/20"
                     : appMode === "assist"
                     ? "bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 disabled:pointer-events-none text-black shadow-cyan-500/20"
                     : "bg-orange-500 hover:bg-orange-400 disabled:opacity-40 disabled:pointer-events-none text-black shadow-orange-500/20"
@@ -466,7 +518,9 @@ export default function App() {
               {phase === "failed" && (
                 <div className="text-center space-y-3">
                   <p className="text-red-400 text-sm">
-                    No s'ha pogut connectar. Comprova el codi i que l'altra persona encara estigui compartint.
+                    {appMode === "call"
+                      ? "No s'ha pogut connectar. Comprova el codi i que l'altra persona tingui la trucada oberta."
+                      : "No s'ha pogut connectar. Comprova el codi i que l'altra persona encara estigui compartint."}
                   </p>
                   <button
                     onClick={handleDisconnect}
@@ -494,6 +548,51 @@ export default function App() {
             )}
           </div>
         </div>
+      ) : appMode === "call" ? (
+        <div className="relative z-10 flex-1 flex items-center justify-center px-6">
+          <div className="relative max-w-md w-full animate-scale-in bg-white/5 border border-white/10 p-8 chamfer backdrop-blur-md shadow-xl text-center space-y-6">
+            <CornerFrame color="emerald" />
+            <div>
+              <p className="text-emerald-300 font-semibold text-lg">📞 Trucada activa</p>
+              <p className="text-gray-400 text-xs mt-1">
+                Sala <span className="font-mono tracking-widest text-gray-200">{roomCodeInput}</span> · sents l'altra
+                banda automàticament
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <PingBadge rttMs={connectionStats.rttMs} packetsLost={connectionStats.packetsLost} />
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <button
+                onClick={toggleMic}
+                title={micSending ? "Silenciar-me" : "Activar el micròfon"}
+                aria-label={micSending ? "Silenciar-me" : "Activar el micròfon"}
+                className={`w-24 h-24 rounded-full text-4xl flex items-center justify-center border-2 transition-all duration-200 shadow-lg ${
+                  micError
+                    ? "text-red-300 bg-red-500/20 border-red-400/50"
+                    : micSending
+                    ? "text-emerald-200 bg-emerald-500/25 border-emerald-400/60 shadow-emerald-500/30 animate-pulse"
+                    : "text-gray-300 bg-black/50 border-white/20 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {micSending ? "🎤" : "🔇"}
+              </button>
+              <p className={`text-xs ${micError ? "text-red-300" : "text-gray-400"}`}>
+                {micError
+                  ? `❌ ${micError}`
+                  : micSending
+                  ? "Micròfon actiu — clica per silenciar-te"
+                  : "Micròfon apagat — clica per parlar"}
+              </p>
+            </div>
+            <button
+              onClick={handleDisconnect}
+              className="w-full font-bold py-3 chamfer-sm bg-red-500/80 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all duration-300"
+            >
+              📵 Penjar
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="relative z-10 flex-1 flex flex-col items-center justify-center p-4 sm:p-8">
           <div
@@ -501,7 +600,7 @@ export default function App() {
             className="relative chamfer overflow-hidden border border-white/10 bg-black w-full aspect-video shadow-2xl max-w-6xl animate-scale-in"
           >
             <canvas ref={canvasRef} className="w-full h-full object-contain block" />
-            <CornerFrame color={appMode === "assist" ? "cyan" : "orange"} />
+            <CornerFrame color={frameColor} />
 
             {appMode === "assist" && diagSnapshot && (
               <div className="absolute top-2 right-2 z-20 bg-black/85 border border-orange-400/30 chamfer-sm px-3 py-2 text-[11px] text-gray-200 max-w-xs space-y-0.5 font-mono">
@@ -693,9 +792,46 @@ export default function App() {
         </div>
       )}
 
+      {/* ℹ️ Avís flotant: aquesta web és SEMPRE el costat Guest. */}
+      {showHostNotice && phase !== "connected" && (
+        <div
+          role="status"
+          className="fixed bottom-14 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md animate-fade-in-up"
+        >
+          <div className="relative bg-black/90 border border-cyan-400/40 chamfer-sm px-4 py-3 pr-10 backdrop-blur-md shadow-2xl shadow-cyan-500/10 text-left">
+            <p className="text-cyan-300 text-[11px] font-semibold uppercase tracking-widest mb-1">
+              ℹ️ Cal l'app d'escriptori a l'altra banda
+            </p>
+            <p className="text-gray-300 text-xs leading-relaxed">
+              Aquesta web és només el costat <span className="text-white font-semibold">Guest</span>. Totes les eines
+              (Jugar, Assistència i Trucada) es connecten sempre a un{" "}
+              <span className="text-white font-semibold">Host d'escriptori</span> amb l'app LVCLITS oberta. No
+              funcionen entre dues webs.
+            </p>
+            <p className="text-gray-400 text-[11px] mt-1.5">
+              Ara: l'altra persona ha d'obrir{" "}
+              <span className="text-gray-200 font-semibold">
+                «{appMode === "call" ? "Trucada Directa" : appMode === "assist" ? "Assistència Remota" : "Compartir Joc"}»
+              </span>{" "}
+              a l'app i donar-te el codi.
+            </p>
+            <button
+              onClick={dismissHostNotice}
+              title="Tanca l'avís"
+              aria-label="Tanca l'avís"
+              className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-xs text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              ✖
+            </button>
+          </div>
+        </div>
+      )}
+
       <footer className="relative z-10 text-center pb-4">
         <p className="text-gray-500 text-[10px] tracking-widest uppercase">
-          {appMode === "assist"
+          {appMode === "call"
+            ? "LVCLITS Platform · Trucada Directa (només veu)"
+            : appMode === "assist"
             ? "LVCLITS Platform · Assistència Remota (teclat, ratolí, estadístiques i fitxers)"
             : "LVCLITS Platform · Joc remot (teclat, ratolí i comandament)"}
         </p>
