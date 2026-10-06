@@ -134,7 +134,7 @@ export default function App() {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect, sendInput, stats: connectionStats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, requestQuickAction, quickActionMsg, sendFileToHost } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput, stats: connectionStats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, requestQuickAction, quickActionMsg, sendFileToHost, toggleMic, micSending, micError } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
 
   // 🖱️🩺 Fix de seguretat + suport a l'Assistència Remota: el ratolí/tàctil
   // ara només s'enganxa al `<canvas>` (mai a la resta de la pàgina), i
@@ -657,6 +657,21 @@ export default function App() {
                   onClick={() => setControlActive((c) => !c)}
                   active={controlActive}
                   accent="emerald"
+                />
+                {/* 🎤 Només controla l'ENVIAMENT del propi micròfon — sentir
+                    l'altra banda ja funciona sol des que el canal s'obre. */}
+                <IconButton
+                  icon={micSending ? "🎤" : "🔇"}
+                  title={
+                    micError
+                      ? `❌ ${micError}`
+                      : micSending
+                      ? "Micròfon actiu — clica per silenciar-te"
+                      : "Micròfon apagat — clica per parlar"
+                  }
+                  onClick={toggleMic}
+                  active={micSending}
+                  accent={micError ? "red" : "cyan"}
                 />
                 <IconButton
                   icon={isFullscreen ? "🡼" : "📺"}

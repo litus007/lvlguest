@@ -1,5 +1,6 @@
 import { createVideoReassembler } from "./videoReassembler";
 import { createAudioReorderBuffer } from "./audioReassembler";
+import { createVoicePlayback, startSendingMic } from "./voiceChat";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
@@ -133,6 +134,13 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   const nextPlayTimeRef = useRef(0);
   const audioTimestampRef = useRef(0);
   const audioPacketCountRef = useRef(0);
+  // 🎤 Veu per micròfon — flux INDEPENDENT del so del sistema de dalt,
+  // amb el seu propi descodificador (mateixa tècnica, canal diferent).
+  const micChannelRef = useRef<RTCDataChannel | null>(null);
+  const micPlaybackRef = useRef<ReturnType<typeof createVoicePlayback> | null>(null);
+  const micSenderRef = useRef<{ stop: () => void } | null>(null);
+  const [micSending, setMicSending] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
 
   const ensureAudioContext = useCallback(() => {
     if (audioCtxRef.current) return audioCtxRef.current;
@@ -407,6 +415,23 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         return;
       }
 
+      if (dc.label === "mic") {
+        micChannelRef.current = dc;
+        const pushMic = createAudioReorderBuffer((payload) => {
+          const ctx = ensureAudioContext();
+          const gain = masterGainRef.current;
+          if (!ctx || !gain) return;
+          if (!micPlaybackRef.current) {
+            micPlaybackRef.current = createVoicePlayback(ctx, gain, 1);
+          }
+          micPlaybackRef.current.feedPacket(payload);
+        });
+        dc.onmessage = (msg) => {
+          const buf = new Uint8Array(msg.data as ArrayBuffer);
+          if (buf.length > 0) pushMic(buf);
+        };
+        return;
+      }
       if (dc.label === "files") {
         filesChannelRef.current = dc;
         dc.onmessage = (msg) => {
@@ -737,6 +762,12 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     inputChannelRef.current = null;
     diagChannelRef.current = null;
     filesChannelRef.current = null;
+    micChannelRef.current = null;
+    micPlaybackRef.current = null;
+    micSenderRef.current?.stop();
+    micSenderRef.current = null;
+    setMicSending(false);
+    setMicError(null);
 
     audioDecoderRef.current?.close();
     audioDecoderRef.current = null;
@@ -759,5 +790,32 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
   useEffect(() => disconnect, [disconnect]);
 
-  return { phase, connect, disconnect, sendInput, stats, videoStats, chatMessages, sendChat, requestQuickAction, quickActionMsg, diagSnapshot, requestDiagRefresh, sendFileToHost };
+  // 🎤 Activa/desactiva l'ENVIAMENT del propi micròfon. Sentir l'altra
+  // banda no depèn d'això — ja es reprodueix sol des que arriben paquets.
+  const toggleMic = useCallback(async () => {
+    if (micSenderRef.current) {
+      micSenderRef.current.stop();
+      micSenderRef.current = null;
+      setMicSending(false);
+      return;
+    }
+    const dc = micChannelRef.current;
+    if (!dc || dc.readyState !== "open") {
+      setMicError("El canal de veu encara no està obert.");
+      return;
+    }
+    setMicError(null);
+    try {
+      micSenderRef.current = await startSendingMic(dc);
+      setMicSending(true);
+    } catch (e) {
+      setMicError(String(e instanceof Error ? e.message : e));
+    }
+  }, []);
+
+  return {
+    phase, connect, disconnect, sendInput, stats, videoStats, chatMessages, sendChat,
+    requestQuickAction, quickActionMsg, diagSnapshot, requestDiagRefresh, sendFileToHost,
+    toggleMic, micSending, micError,
+  };
 }
