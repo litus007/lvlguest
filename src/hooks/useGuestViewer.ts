@@ -14,10 +14,14 @@ export interface ConnectionStats {
   jitterMs: number | null;
 }
 
+// 👥 Multi-guest: el Host pot tenir VARIS Guests a la mateixa sala, tots al
+// mateix canal de difusió. `toPeerId` diu a qui va adreçat cada missatge;
+// qui el rep i no n'és el destinatari l'ignora. (Sense `toPeerId` — Hosts
+// antics — el missatge es tracta com sempre.)
 type WebRtcSignalMessage =
-  | { type: "offer"; fromPeerId: string; sdp: string }
-  | { type: "answer"; fromPeerId: string; sdp: string }
-  | { type: "ice-candidate"; fromPeerId: string; candidate: string };
+  | { type: "offer"; fromPeerId: string; toPeerId?: string; sdp: string }
+  | { type: "answer"; fromPeerId: string; toPeerId?: string; sdp: string }
+  | { type: "ice-candidate"; fromPeerId: string; toPeerId?: string; candidate: string };
 
 // Mateixos servidors STUN/TURN que fa servir l'app d'escriptori — han de
 // coincidir perquè els dos costats negociïn candidats ICE compatibles
@@ -101,6 +105,10 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   const [diagSnapshot, setDiagSnapshot] = useState<Record<string, unknown> | null>(null);
 
   const myPeerIdRef = useRef<string>(crypto.randomUUID());
+  // 👥 El Host que ens ha enviat l'oferta: hi adrecem respostes i candidats ICE.
+  const hostPeerIdRef = useRef<string | null>(null);
+  // 👥 Gent a la sala segons la presència (inclòs jo) — per a "N persones".
+  const [peopleCount, setPeopleCount] = useState(0);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const signalChannelRef = useRef<RealtimeChannel | null>(null);
   const presenceChannelRef = useRef<RealtimeChannel | null>(null);
@@ -137,7 +145,9 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   // 🎤 Veu per micròfon — flux INDEPENDENT del so del sistema de dalt,
   // amb el seu propi descodificador (mateixa tècnica, canal diferent).
   const micChannelRef = useRef<RTCDataChannel | null>(null);
-  const micPlaybackRef = useRef<ReturnType<typeof createVoicePlayback> | null>(null);
+  // 🗣️ Un reproductor per parlant: "host" (canal "mic") i cada altre convidat
+  // (canals "voice:<peer_id>", retransmesos pel Host en trucades/partides de grup).
+  const voicePlaybacksRef = useRef<Map<string, ReturnType<typeof createVoicePlayback>>>(new Map());
   const micSenderRef = useRef<{ stop: () => void } | null>(null);
   const [micSending, setMicSending] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
@@ -352,8 +362,31 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   );
 
   const sendSignal = useCallback((payload: WebRtcSignalMessage) => {
-    signalChannelRef.current?.send({ type: "broadcast", event: "webrtc-signal", payload });
+    signalChannelRef.current?.send({
+      type: "broadcast",
+      event: "webrtc-signal",
+      payload: { ...payload, toPeerId: hostPeerIdRef.current ?? undefined },
+    });
   }, []);
+
+  // 🗣️ Reprodueix un paquet de veu d'un parlant concret.
+  const feedVoice = useCallback(
+    (sourceId: string, payload: Uint8Array) => {
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      let playback = voicePlaybacksRef.current.get(sourceId);
+      if (!playback) {
+        // 🛡️ La veu va DIRECTA a la sortida, no pel guany mestre: el botó 🔊
+        // només silencia el so del joc/sistema. El Host (Rust) codifica en
+        // estèreo, així que el descodificador també és de 2 canals.
+        playback = createVoicePlayback(ctx, ctx.destination, 2);
+        voicePlaybacksRef.current.set(sourceId, playback);
+      }
+      playback.feedPacket(payload);
+    },
+    [ensureAudioContext]
+  );
 
   const ensurePeerConnection = useCallback(() => {
     if (pcRef.current) return pcRef.current;
@@ -415,26 +448,26 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         return;
       }
 
+      // 👥 Veu d'un ALTRE convidat, retransmesa pel Host: cada parlant té el
+      // seu canal i, per tant, la seva pròpia reordenació i descodificador.
+      if (dc.label.startsWith("voice:")) {
+        const sourceId = dc.label.slice("voice:".length);
+        dc.binaryType = "arraybuffer";
+        const pushVoice = createAudioReorderBuffer((payload) => feedVoice(sourceId, payload));
+        dc.onmessage = (msg) => {
+          const buf = new Uint8Array(msg.data as ArrayBuffer);
+          if (buf.length > 0) pushVoice(buf);
+        };
+        return;
+      }
+
       if (dc.label === "mic") {
         micChannelRef.current = dc;
         // 🛡️ FIX: sense això el navegador lliura `Blob` (el valor per
         // defecte als canals de dades) i `new Uint8Array(blob)` queda buit:
         // la veu rebuda s'ignorava en silenci. Vídeo i àudio ja ho feien.
         dc.binaryType = "arraybuffer";
-        const pushMic = createAudioReorderBuffer((payload) => {
-          const ctx = ensureAudioContext();
-          if (!ctx) return;
-          if (ctx.state === "suspended") ctx.resume().catch(() => {});
-          if (!micPlaybackRef.current) {
-            // 🛡️ La veu va DIRECTA a la sortida, no pel guany mestre: el
-            // botó 🔊 només silencia el so del joc/sistema. Abans, a
-            // Assistència (sense aquest botó i amb `isMuted` = true) la
-            // veu del Host quedava a volum 0. El Host (Rust) codifica en
-            // estèreo, així que el descodificador també és de 2 canals.
-            micPlaybackRef.current = createVoicePlayback(ctx, ctx.destination, 2);
-          }
-          micPlaybackRef.current.feedPacket(payload);
-        });
+        const pushMic = createAudioReorderBuffer((payload) => feedVoice("host", payload));
         dc.onopen = () => onLog("🎤 Canal de veu obert.");
         dc.onmessage = (msg) => {
           const buf = new Uint8Array(msg.data as ArrayBuffer);
@@ -568,7 +601,7 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     };
 
     return pc;
-  }, [ensureAudioContext, handleAudioPacket, handleVideoFrame, onLog, sendSignal]);
+  }, [ensureAudioContext, feedVoice, handleAudioPacket, handleVideoFrame, onLog, sendSignal]);
 
   const applyOffer = useCallback(
     async (sdp: string) => {
@@ -673,7 +706,10 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
         .channel(`webrtc-signal:${signalRoomId}`, { config: { broadcast: { self: false } } })
         .on("broadcast", { event: "webrtc-signal" }, ({ payload }: { payload: WebRtcSignalMessage }) => {
           if (payload.fromPeerId === myPeerIdRef.current) return;
+          // 👥 Adreçat a un altre convidat de la sala: no és per a mi.
+          if (payload.toPeerId && payload.toPeerId !== myPeerIdRef.current) return;
           if (payload.type === "offer") {
+            hostPeerIdRef.current = payload.fromPeerId;
             onLog(`Oferta rebuda del Host — negociant...`);
             applyOffer(payload.sdp);
           } else if (payload.type === "ice-candidate") {
@@ -686,6 +722,9 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
 
       const presenceChannel = supabase.channel(presenceRoomName, {
         config: { presence: { key: myPeerIdRef.current } },
+      });
+      presenceChannel.on("presence", { event: "sync" }, () => {
+        setPeopleCount(Object.keys(presenceChannel.presenceState()).length);
       });
       presenceChannel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
@@ -780,7 +819,9 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
     diagChannelRef.current = null;
     filesChannelRef.current = null;
     micChannelRef.current = null;
-    micPlaybackRef.current = null;
+    voicePlaybacksRef.current.clear();
+    hostPeerIdRef.current = null;
+    setPeopleCount(0);
     micSenderRef.current?.stop();
     micSenderRef.current = null;
     setMicSending(false);
@@ -833,6 +874,6 @@ export function useGuestViewer({ canvasRef, audioMuted, onLog }: UseGuestViewerO
   return {
     phase, connect, disconnect, sendInput, stats, videoStats, chatMessages, sendChat,
     requestQuickAction, quickActionMsg, diagSnapshot, requestDiagRefresh, sendFileToHost,
-    toggleMic, micSending, micError,
+    toggleMic, micSending, micError, peopleCount,
   };
 }

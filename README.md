@@ -38,6 +38,20 @@ WebRTC i obre les sales). **Cap eina funciona entre dues webs.** La
 pàgina ho recorda amb un avís flotant (es pot tancar i es reobre amb el
 botó ℹ️ de la capçalera).
 
+## Multijugador (varis Guests a la mateixa sala)
+
+El Host pot tenir **varis Guests alhora amb el mateix codi**:
+
+- 🎮 **Jugar**: fins a **4 jugadors**. El Host crea un comandament virtual
+  Xbox360 per jugador. El jugador 1 controla teclat, ratolí i mando; els
+  altres, només el seu mando. El vídeo i el so es capturen i codifiquen un
+  sol cop i es difonen a tothom.
+- 📞 **Trucada**: fins a **8 persones**. Cada Guest només té connexió amb el
+  Host, que retransmet la veu de cadascú a la resta (canals `voice:<peer_id>`,
+  un reproductor per parlant). La senyalització va adreçada amb `toPeerId`.
+- 🩺 **Assistència** continua sent d'**un sol Guest** (és una sessió
+  tècnica 1 a 1).
+
 ## Eines disponibles
 
 Un selector a la pantalla d'inici tria l'eina; cada una fa servir el seu

@@ -152,7 +152,7 @@ export default function App() {
     setLog((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
 
-  const { phase, connect, disconnect, sendInput, stats: connectionStats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, requestQuickAction, quickActionMsg, sendFileToHost, toggleMic, micSending, micError } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
+  const { phase, connect, disconnect, sendInput, stats: connectionStats, videoStats, chatMessages, sendChat, diagSnapshot, requestDiagRefresh, requestQuickAction, quickActionMsg, sendFileToHost, toggleMic, micSending, micError, peopleCount } = useGuestViewer({ canvasRef, audioMuted: isMuted, onLog: pushLog });
 
   // 🖱️🩺 Fix de seguretat + suport a l'Assistència Remota: el ratolí/tàctil
   // ara només s'enganxa al `<canvas>` (mai a la resta de la pàgina), i
@@ -555,10 +555,11 @@ export default function App() {
             <div>
               <p className="text-emerald-300 font-semibold text-lg">📞 Trucada activa</p>
               <p className="text-gray-400 text-xs mt-1">
-                Sala <span className="font-mono tracking-widest text-gray-200">{roomCodeInput}</span> · sents l'altra
-                banda automàticament
+                Sala <span className="font-mono tracking-widest text-gray-200">{roomCodeInput}</span> · sents tothom
+                automàticament
               </p>
             </div>
+            <p className="text-gray-300 text-xs">👥 {Math.max(peopleCount, 2)} persones a la trucada</p>
             <div className="flex justify-center">
               <PingBadge rttMs={connectionStats.rttMs} packetsLost={connectionStats.packetsLost} />
             </div>
@@ -808,6 +809,13 @@ export default function App() {
               <span className="text-white font-semibold">Host d'escriptori</span> amb l'app LVCLITS oberta. No
               funcionen entre dues webs.
             </p>
+            {appMode !== "assist" && (
+              <p className="text-gray-400 text-[11px] mt-1.5">
+                {appMode === "call"
+                  ? "A una trucada hi poden entrar fins a 8 persones amb el mateix codi, i tothom se sent amb tothom."
+                  : "A una partida hi poden jugar fins a 4 persones amb el mateix codi. El jugador 1 controla teclat, ratolí i mando; la resta, només el seu mando."}
+              </p>
+            )}
             <p className="text-gray-400 text-[11px] mt-1.5">
               Ara: l'altra persona ha d'obrir{" "}
               <span className="text-gray-200 font-semibold">
