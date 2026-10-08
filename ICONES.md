@@ -50,3 +50,7 @@ Van a `public/icons/`. Fan servir de debò aquests:
 
 Els altres (`16, 32, 48, 64, 128, 256, 1024`) no estan referenciats ara mateix;
 són opcionals.
+
+## Transfer (eina 5)
+
+Pestanya del selector: `tool-transfer` (16×16 visibles; SVG o PNG a `public/ui-icons/`).

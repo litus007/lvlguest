@@ -6,6 +6,7 @@ import CornerFrame from "./components/common/CornerFrame";
 import PingBadge from "./components/common/PingBadge";
 import VirtualGamepad from "./components/common/VirtualGamepad";
 import AppIcon from "./components/common/AppIcon";
+import TransferPanel from "./components/transfer/TransferPanel";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -165,9 +166,11 @@ export default function App() {
   // control automàticament; també es pot activar/desactivar a mà amb el
   // botó "🖱️ Control" per qui no vulgui/pugui fer servir pantalla completa.
   const [controlActive, setControlActive] = useState(false);
-  const [appMode, setAppMode] = useState<"game" | "assist" | "call">("game");
-  // 🎨 Color d'identitat de cada eina: 🎮 taronja · 🩺 cian · 📞 verd.
-  const frameColor = appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
+  const [appMode, setAppMode] = useState<"game" | "assist" | "call" | "transfer">("game");
+  // 📁 Transfer està "ocupat" quan hi ha sala oberta: bloqueja el canvi d'eina.
+  const [transferBusy, setTransferBusy] = useState(false);
+  // 🎨 Color d'identitat de cada eina: 🎮 taronja · 🩺 cian · 📞 verd · 📁 violeta.
+  const frameColor = appMode === "transfer" ? "violet" : appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
 
   // Envia teclat, ratolí i comandament al Host pel canal "inputs". Ratolí i
   // tàctil escopats al `<canvas>` i només actius amb `controlActive` —
@@ -250,7 +253,7 @@ export default function App() {
   };
 
   const handleConnect = () => {
-    if (!roomCodeInput.trim()) return;
+    if (appMode === "transfer" || !roomCodeInput.trim()) return;
     connect(roomCodeInput, lanOnly, appMode);
   };
 
@@ -313,6 +316,49 @@ export default function App() {
     requestQuickAction(action);
   };
 
+  // 🆕 Selector d'eina (Jugar · Assistència · Trucada · Transfer). Bloquejat
+  // mentre s'intenta connectar o hi ha una sala de Transfer oberta.
+  const modeSelector = (
+    <div className="flex mb-6 chamfer-sm border border-white/10 overflow-hidden">
+      <button
+        onClick={() => setAppMode("game")}
+        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
+        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
+          appMode === "game" ? "bg-orange-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
+        }`}
+      >
+        <AppIcon name="tool-game" fallback="🎮" size={16} /> Jugar
+      </button>
+      <button
+        onClick={() => setAppMode("assist")}
+        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
+        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
+          appMode === "assist" ? "bg-cyan-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
+        }`}
+      >
+        <AppIcon name="tool-assist" fallback="🩺" size={16} /> Assistència
+      </button>
+      <button
+        onClick={() => setAppMode("call")}
+        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
+        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
+          appMode === "call" ? "bg-emerald-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
+        }`}
+      >
+        <AppIcon name="tool-call" fallback="📞" size={16} /> Trucada
+      </button>
+      <button
+        onClick={() => setAppMode("transfer")}
+        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
+        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
+          appMode === "transfer" ? "bg-violet-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
+        }`}
+      >
+        <AppIcon name="tool-transfer" fallback="📁" size={16} /> Transfer
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-black relative overflow-hidden flex flex-col">
       {/* Art de fons, la mateixa identitat "Compartir Joc" de l'app d'escriptori */}
@@ -370,48 +416,34 @@ export default function App() {
               ⬇ Instal·lar app
             </button>
           )}
-          <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest ${appMode === "call" ? "text-emerald-400" : appMode === "assist" ? "text-cyan-400" : "text-gray-400"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${appMode === "call" ? "bg-emerald-400" : appMode === "assist" ? "bg-cyan-400" : "bg-orange-400"}`} />
-            {appMode === "call" ? "Sistema 04 · Trucada" : appMode === "assist" ? "Sistema 03 · Assistència" : "Sistema 02 · Streaming"}
+          <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest ${appMode === "transfer" ? "text-violet-400" : appMode === "call" ? "text-emerald-400" : appMode === "assist" ? "text-cyan-400" : "text-gray-400"}`}>
+            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${appMode === "transfer" ? "bg-violet-400" : appMode === "call" ? "bg-emerald-400" : appMode === "assist" ? "bg-cyan-400" : "bg-orange-400"}`} />
+            {appMode === "transfer" ? "Sistema 05 · Transfer" : appMode === "call" ? "Sistema 04 · Trucada" : appMode === "assist" ? "Sistema 03 · Assistència" : "Sistema 02 · Streaming"}
           </div>
         </div>
       </div>
 
-      {phase !== "connected" ? (
+      {appMode === "transfer" ? (
+        <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-4">
+          <div className="max-w-lg w-full animate-fade-in-up">
+            {modeSelector}
+            <div className="text-center mb-6">
+              <span className="text-xs uppercase tracking-widest font-semibold text-violet-300/80">📁 Intercanvi d'arxius</span>
+              <h1 className="text-4xl font-extrabold text-white tracking-tight mt-2">
+                Trans<span className="text-violet-400 drop-shadow-[0_0_20px_rgba(167,139,250,0.4)]">fer</span>
+              </h1>
+              <p className="text-gray-400 text-sm mt-2">
+                Eina d'intercanvi d'arxius sense límits: P2P directe, sense pujar res a cap servidor i sense cap topall de
+                mida. Els dos escriviu la mateixa paraula i ja podeu enviar-vos fitxers en qualsevol direcció.
+              </p>
+            </div>
+            <TransferPanel onBusyChange={setTransferBusy} />
+          </div>
+        </div>
+      ) : phase !== "connected" ? (
         <div className="relative z-10 flex-1 flex items-center justify-center px-6">
           <div className="max-w-md w-full animate-fade-in-up">
-            {/* 🆕 Selector d'eina: "Jugar" (mode existent) vs "Assistència
-                Remota" (tècnica: control + estadístiques + fitxers, sense
-                comandament). Bloquejat mentre s'intenta connectar. */}
-            <div className="flex mb-6 chamfer-sm border border-white/10 overflow-hidden">
-              <button
-                onClick={() => setAppMode("game")}
-                disabled={phase === "searching" || phase === "negotiating"}
-                className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
-                  appMode === "game" ? "bg-orange-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
-                }`}
-              >
-                <AppIcon name="tool-game" fallback="🎮" size={16} /> Jugar
-              </button>
-              <button
-                onClick={() => setAppMode("assist")}
-                disabled={phase === "searching" || phase === "negotiating"}
-                className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
-                  appMode === "assist" ? "bg-cyan-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
-                }`}
-              >
-                <AppIcon name="tool-assist" fallback="🩺" size={16} /> Assistència
-              </button>
-              <button
-                onClick={() => setAppMode("call")}
-                disabled={phase === "searching" || phase === "negotiating"}
-                className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
-                  appMode === "call" ? "bg-emerald-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
-                }`}
-              >
-                <AppIcon name="tool-call" fallback="📞" size={16} /> Trucada
-              </button>
-            </div>
+            {modeSelector}
 
             <div className="text-center mb-8">
               <span className={`text-xs uppercase tracking-widest font-semibold ${appMode === "call" ? "text-emerald-300/80" : appMode === "assist" ? "text-cyan-300/80" : "text-orange-300/80"}`}>
@@ -813,19 +845,28 @@ export default function App() {
             <p className="text-cyan-300 text-[11px] font-semibold uppercase tracking-widest mb-1">
               ℹ️ Cal l'app d'escriptori a l'altra banda
             </p>
+            {appMode === "transfer" ? (
+              <p className="text-gray-300 text-xs leading-relaxed">
+                <span className="text-white font-semibold">Transfer és l'excepció:</span> no necessita Host. Funciona
+                entre dues webs, entre web i app d'escriptori, o entre dues apps — només cal que tots dos entreu amb la
+                mateixa paraula.
+              </p>
+            ) : (
             <p className="text-gray-300 text-xs leading-relaxed">
               Aquesta web és només el costat <span className="text-white font-semibold">Guest</span>. Totes les eines
               (Jugar, Assistència i Trucada) es connecten sempre a un{" "}
               <span className="text-white font-semibold">Host d'escriptori</span> amb l'app LVCLITS oberta. No
-              funcionen entre dues webs.
+              funcionen entre dues webs (excepte Transfer).
             </p>
-            {appMode !== "assist" && (
+            )}
+            {appMode !== "assist" && appMode !== "transfer" && (
               <p className="text-gray-400 text-[11px] mt-1.5">
                 {appMode === "call"
                   ? "A una trucada hi poden entrar fins a 8 persones amb el mateix codi, i tothom se sent amb tothom."
                   : "A una partida hi poden jugar fins a 4 persones amb el mateix codi. El jugador 1 controla teclat, ratolí i mando; la resta, només el seu mando."}
               </p>
             )}
+            {appMode !== "transfer" && (
             <p className="text-gray-400 text-[11px] mt-1.5">
               Ara: l'altra persona ha d'obrir{" "}
               <span className="text-gray-200 font-semibold">
@@ -833,6 +874,7 @@ export default function App() {
               </span>{" "}
               a l'app i donar-te el codi.
             </p>
+            )}
             <button
               onClick={dismissHostNotice}
               title="Tanca l'avís"
@@ -847,7 +889,9 @@ export default function App() {
 
       <footer className="relative z-10 text-center pb-4">
         <p className="text-gray-500 text-[10px] tracking-widest uppercase">
-          {appMode === "call"
+          {appMode === "transfer"
+            ? "LVCLITS Platform · Transfer (arxius sense límits, P2P)"
+            : appMode === "call"
             ? "LVCLITS Platform · Trucada Directa (només veu)"
             : appMode === "assist"
             ? "LVCLITS Platform · Assistència Remota (teclat, ratolí, estadístiques i fitxers)"

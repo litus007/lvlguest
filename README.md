@@ -31,10 +31,10 @@ sistema operatiu no es pot fer des d'una pàgina web — però per
 
 ## Requisit: sempre un Host d'escriptori
 
-Aquesta web és **només el costat Guest**. Les tres eines necessiten que
+Aquesta web és **només el costat Guest**. Les tres primeres eines (Jugar, Assistència, Trucada) necessiten que
 l'altra banda tingui l'app d'escriptori LVCLITS oberta com a **Host**
 (és qui captura pantalla/àudio/micròfon amb codi natiu, crea l'oferta
-WebRTC i obre les sales). **Cap eina funciona entre dues webs.** La
+WebRTC i obre les sales). **Aquestes tres no funcionen entre dues webs.** L'excepció és 📁 **Transfer** (veure més avall), que no té Host. La
 pàgina ho recorda amb un avís flotant (es pot tancar i es reobre amb el
 botó ℹ️ de la capçalera).
 
@@ -73,6 +73,7 @@ que comparteixin codi:
 | 🎮 Jugar | `<codi>` | `streaming-presence:<codi>` |
 | 🩺 Assistència | `assist:<codi>` | `assist-presence:<codi>` |
 | 📞 Trucada | `call:<codi>` | `call-presence:<codi>` |
+| 📁 Transfer | `transfer:<paraula>` | al mateix canal |
 
 **📞 Trucada Directa** és la més lleugera: només veu (canal de dades
 `mic`, Opus amb capçalera de seqüència de 4 bytes). Aquesta pàgina només
@@ -80,6 +81,28 @@ pot **unir-se** a una trucada oberta des de l'app d'escriptori; per
 obrir-ne una cal l'app. Sentir l'altra banda és automàtic; el botó del
 micròfon només controla l'enviament. Cal Chrome o Edge per enviar veu
 (`MediaStreamTrackProcessor` + `AudioEncoder`).
+
+## 📁 Transfer — intercanvi d'arxius sense límits (eina 5)
+
+Eina d'**intercanvi d'arxius sense límits**: P2P directe (WebRTC), res no es
+puja a cap servidor. Fa servir el **mateix sistema de paraula** que la resta:
+les dues persones escriuen la mateixa paraula i es troben. Va per Supabase
+Realtime (presència + broadcast) amb la **mateixa URL i anon key**, **sense cap
+taula ni SQL**.
+
+- **Sense Host/Guest**: tots dos poden enviar i rebre. Funciona web↔web,
+  web↔escriptori i escriptori↔escriptori (l'app d'escriptori inclou la mateixa eina).
+- **Sala de 2 persones**: les dues primeres per hora d'entrada són la parella; una
+  tercera veu "sala plena". Si una marxa, la sala segueix oberta per a una altra.
+- **Sense límit de mida**: amb Chrome/Edge (File System Access API) el que es rep
+  s'escriu directament a disc; l'emissor llegeix en blocs i el receptor confirma
+  cada 4 MB (màx. 32 MB en vol), així que la RAM no creix. A Firefox/Safari/mòbil
+  es fa fallback a memòria i el límit real és la RAM del receptor.
+- **El receptor accepta cada fitxer** amb un clic (el navegador només deixa obrir
+  "Desar com…" des d'un gest d'usuari), o tria una carpeta una vegada i la resta
+  es desa sola. Es poden enviar varis fitxers a la vegada (en cua) i arrossegar-los.
+- Codi: `src/lib/transferLink.ts` (nucli, idèntic a l'app d'escriptori),
+  `src/hooks/useTransfer.ts`, `src/components/transfer/TransferPanel.tsx`.
 
 ## Per què és possible
 
