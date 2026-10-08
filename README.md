@@ -52,6 +52,16 @@ El Host pot tenir **varis Guests alhora amb el mateix codi**:
 - 🩺 **Assistència** continua sent d'**un sol Guest** (és una sessió
   tècnica 1 a 1).
 
+## Mando virtual
+
+No surt sol: s'activa amb el botó 🕹️ de la barra (en qualsevol dispositiu).
+Porta stick esquerre (o creueta ✚), A/B/X/Y (o stick dret 🎯 per a la càmera),
+LB/RB, LT/RT i Back/Start, i vibra en prémer si el dispositiu ho permet.
+
+## Icones personalitzades
+
+Vegeu `ICONES.md`: deixant fitxers a `public/ui-icons/<nom>.svg` es substitueixen els emojis sense tocar codi.
+
 ## Eines disponibles
 
 Un selector a la pantalla d'inici tria l'eina; cada una fa servir el seu

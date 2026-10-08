@@ -5,6 +5,7 @@ import Logo from "./components/common/Logo";
 import CornerFrame from "./components/common/CornerFrame";
 import PingBadge from "./components/common/PingBadge";
 import VirtualGamepad from "./components/common/VirtualGamepad";
+import AppIcon from "./components/common/AppIcon";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -18,6 +19,7 @@ const HOST_NOTICE_KEY = "lvclits-host-notice-dismissed";
 // sobre el vídeo. `active` pinta l'accent de color quan l'estat és "on".
 function IconButton({
   icon,
+  iconName,
   title,
   onClick,
   active = false,
@@ -26,6 +28,8 @@ function IconButton({
   size = "md",
 }: {
   icon: ReactNode;
+  /** Nom de la icona personalitzada (`public/ui-icons/<nom>.svg|png`); si no existeix, es mostra `icon`. */
+  iconName?: string;
   title: string;
   onClick?: () => void;
   active?: boolean;
@@ -51,7 +55,7 @@ function IconButton({
         active ? accentClasses[accent] : "text-gray-300 bg-black/50 border-white/15 hover:bg-white/10 hover:text-white"
       }`}
     >
-      {icon}
+      {iconName ? <AppIcon name={iconName} fallback={icon} size={size === "sm" ? 16 : 20} /> : icon}
     </button>
   );
 }
@@ -94,7 +98,7 @@ function ChatPanel({
           maxLength={500}
           className="flex-1 bg-black/60 border border-white/15 rounded-full px-3 py-1.5 text-xs text-white"
         />
-        <IconButton icon="➤" title="Enviar missatge" onClick={onSend} size="sm" active accent="cyan" />
+        <IconButton icon="➤" iconName="send" title="Enviar missatge" onClick={onSend} size="sm" active accent="cyan" />
       </div>
     </div>
   );
@@ -233,13 +237,9 @@ export default function App() {
     };
   }, []);
 
-  // En un dispositiu tàctil, mostrem el mando virtual automàticament un
-  // cop connectats — es pot amagar amb el botó corresponent.
-  useEffect(() => {
-    if (phase === "connected" && isTouchDevice) {
-      setShowVirtualPad(true);
-    }
-  }, [phase, isTouchDevice]);
+  // 🎮 El mando virtual NO surt sol: l'usuari l'activa amb el botó 🕹️ quan el
+  // necessita (abans apareixia automàticament en dispositius tàctils i
+  // tapava la imatge).
 
   const handleInstall = async () => {
     if (!installEvent) return;
@@ -391,7 +391,7 @@ export default function App() {
                   appMode === "game" ? "bg-orange-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
                 }`}
               >
-                🎮 Jugar
+                <AppIcon name="tool-game" fallback="🎮" size={16} /> Jugar
               </button>
               <button
                 onClick={() => setAppMode("assist")}
@@ -400,7 +400,7 @@ export default function App() {
                   appMode === "assist" ? "bg-cyan-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
                 }`}
               >
-                🩺 Assistència
+                <AppIcon name="tool-assist" fallback="🩺" size={16} /> Assistència
               </button>
               <button
                 onClick={() => setAppMode("call")}
@@ -409,7 +409,7 @@ export default function App() {
                   appMode === "call" ? "bg-emerald-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
                 }`}
               >
-                📞 Trucada
+                <AppIcon name="tool-call" fallback="📞" size={16} /> Trucada
               </button>
             </div>
 
@@ -576,7 +576,7 @@ export default function App() {
                     : "text-gray-300 bg-black/50 border-white/20 hover:bg-white/10 hover:text-white"
                 }`}
               >
-                {micSending ? "🎤" : "🔇"}
+                <AppIcon name={micSending ? "mic-on" : "mic-off"} fallback={micSending ? "🎤" : "🔇"} size={44} />
               </button>
               <p className={`text-xs ${micError ? "text-red-300" : "text-gray-400"}`}>
                 {micError
@@ -590,7 +590,7 @@ export default function App() {
               onClick={handleDisconnect}
               className="w-full font-bold py-3 chamfer-sm bg-red-500/80 hover:bg-red-500 text-white shadow-lg shadow-red-500/20 transition-all duration-300"
             >
-              📵 Penjar
+              <AppIcon name="hang-up" fallback="📵" size={18} /> Penjar
             </button>
           </div>
         </div>
@@ -637,6 +637,7 @@ export default function App() {
                 <div className="flex gap-2 pt-1">
                   <IconButton
                     icon="🧹"
+                    iconName="quick-clean"
                     title="Buida temporals del Host"
                     onClick={() => handleQuickAction("clean_temp_files")}
                     disabled={quickActionBusy !== null}
@@ -646,6 +647,7 @@ export default function App() {
                   />
                   <IconButton
                     icon="🔒"
+                    iconName="quick-lock"
                     title="Bloqueja la pantalla del Host"
                     onClick={() => handleQuickAction("lock_screen")}
                     disabled={quickActionBusy !== null}
@@ -665,6 +667,7 @@ export default function App() {
             <div className="absolute top-3 right-3 z-30">
               <IconButton
                 icon={hudVisible ? "⬍" : "👁️"}
+                iconName={hudVisible ? "hud-hide" : "hud-show"}
                 title={hudVisible ? "Amaga els controls" : "Mostra els controls"}
                 onClick={() => setHudVisible((v) => !v)}
                 size="sm"
@@ -687,13 +690,14 @@ export default function App() {
               <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-end gap-2 z-20">
                 <IconButton
                   icon="🩺"
+                  iconName="diagnostics"
                   title="Actualitza estadístiques del Host"
                   onClick={handleRequestDiag}
                   disabled={diagLoading}
                   active={diagLoading}
                   accent="cyan"
                 />
-                <IconButton icon="💬" title="Xat amb el Host" onClick={() => setChatOpen((o) => !o)} active={chatOpen} accent="cyan" />
+                <IconButton icon="💬" iconName="chat" title="Xat amb el Host" onClick={() => setChatOpen((o) => !o)} active={chatOpen} accent="cyan" />
                 <label title="Tria un arxiu per enviar al Host">
                   <span
                     className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all duration-200 backdrop-blur-md shadow-md cursor-pointer ${
@@ -709,6 +713,7 @@ export default function App() {
                 {fileToSend && (
                   <IconButton
                     icon={sendProgress !== null ? `${sendProgress}%` : "📤"}
+                    iconName={sendProgress !== null ? undefined : "send-file"}
                     title={sendProgress !== null ? `Enviant... ${sendProgress}%` : `Enviar "${fileToSend.name}" al Host`}
                     onClick={handleSendFile}
                     disabled={sendProgress !== null}
@@ -726,19 +731,21 @@ export default function App() {
 
             {hudVisible && (
               <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
-                <IconButton icon="✖" title="Desconnectar" onClick={handleDisconnect} accent="red" active />
+                <IconButton icon="✖" iconName="disconnect" title="Desconnectar" onClick={handleDisconnect} accent="red" active />
                 {appMode === "game" && (
                   <IconButton
                     icon={isMuted ? "🔇" : "🔊"}
+                    iconName={isMuted ? "sound-off" : "sound-on"}
                     title={isMuted ? "Activar so" : "Silenciar"}
                     onClick={() => setIsMuted((m) => !m)}
                     active={!isMuted}
                   />
                 )}
-                {appMode === "game" && isTouchDevice && (
+                {appMode === "game" && (
                   <IconButton
                     icon="🕹️"
-                    title="Mando tàctil"
+                    iconName="gamepad"
+                    title="Mando virtual"
                     onClick={() => setShowVirtualPad((v) => !v)}
                     active={showVirtualPad}
                   />
@@ -749,6 +756,7 @@ export default function App() {
                     necessitat de fullscreen (útil a iOS o en finestra). */}
                 <IconButton
                   icon={controlActive ? "🎮" : "👁️"}
+                  iconName={controlActive ? "control-on" : "control-off"}
                   title={
                     controlActive
                       ? "Control actiu — el teclat i el ratolí arriben al Host. Clica per desactivar."
@@ -762,6 +770,7 @@ export default function App() {
                     l'altra banda ja funciona sol des que el canal s'obre. */}
                 <IconButton
                   icon={micSending ? "🎤" : "🔇"}
+                  iconName={micSending ? "mic-on" : "mic-off"}
                   title={
                     micError
                       ? `❌ ${micError}`
@@ -775,6 +784,7 @@ export default function App() {
                 />
                 <IconButton
                   icon={isFullscreen ? "🡼" : "📺"}
+                  iconName={isFullscreen ? "fullscreen-exit" : "fullscreen-enter"}
                   title={isFullscreen ? "Sortir de pantalla completa" : "Pantalla completa"}
                   onClick={handleFullscreen}
                 />
