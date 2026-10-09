@@ -7,6 +7,8 @@ import PingBadge from "./components/common/PingBadge";
 import VirtualGamepad from "./components/common/VirtualGamepad";
 import AppIcon from "./components/common/AppIcon";
 import TransferPanel from "./components/transfer/TransferPanel";
+import NetworkField, { type FieldAccent } from "./components/common/NetworkField";
+import ToolIcon, { type ToolIconName } from "./components/common/ToolIcon";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -105,10 +107,32 @@ function ChatPanel({
   );
 }
 
+type AppMode = "game" | "assist" | "call" | "transfer";
+
+// Classes literals perquè Tailwind les detecti.
+const TOOLS: { id: AppMode; label: string; icon: ToolIconName; on: string; dot: string; badge: string; glow: string }[] = [
+  { id: "game", label: "Jugar", icon: "game", on: "bg-orange-500 text-black shadow-orange-500/30", dot: "bg-orange-400", badge: "bg-orange-500/15 text-orange-300", glow: "drop-shadow-[0_0_16px_rgba(251,146,60,0.55)]" },
+  { id: "assist", label: "Assistència", icon: "assist", on: "bg-cyan-500 text-black shadow-cyan-500/30", dot: "bg-cyan-400", badge: "bg-cyan-500/15 text-cyan-300", glow: "drop-shadow-[0_0_16px_rgba(34,211,238,0.55)]" },
+  { id: "call", label: "Trucada", icon: "call", on: "bg-emerald-500 text-black shadow-emerald-500/30", dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-300", glow: "drop-shadow-[0_0_16px_rgba(52,211,153,0.55)]" },
+  { id: "transfer", label: "Transfer", icon: "transfer", on: "bg-violet-500 text-black shadow-violet-500/30", dot: "bg-violet-400", badge: "bg-violet-500/15 text-violet-300", glow: "drop-shadow-[0_0_16px_rgba(167,139,250,0.55)]" },
+];
+const FIELD_ACCENT: Record<AppMode, FieldAccent> = { game: "orange", assist: "cyan", call: "emerald", transfer: "violet" };
+const FIELD_GLOW: Record<AppMode, string> = { game: "251,146,60", assist: "34,211,238", call: "52,211,153", transfer: "167,139,250" };
+
+function HeroBadge({ mode }: { mode: AppMode }) {
+  const t = TOOLS.find((x) => x.id === mode)!;
+  return (
+    <div className={`mx-auto mb-4 w-fit ${t.glow}`}>
+      <div className={`w-14 h-14 chamfer flex items-center justify-center ${t.badge}`}>
+        <ToolIcon name={t.icon} size={28} />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [roomCodeInput, setRoomCodeInput] = useState("");
   const [log, setLog] = useState<string[]>([]);
-  const [bgFailed, setBgFailed] = useState(false);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [gamepadName, setGamepadName] = useState<string | null>(null);
@@ -166,11 +190,15 @@ export default function App() {
   // control automàticament; també es pot activar/desactivar a mà amb el
   // botó "🖱️ Control" per qui no vulgui/pugui fer servir pantalla completa.
   const [controlActive, setControlActive] = useState(false);
-  const [appMode, setAppMode] = useState<"game" | "assist" | "call" | "transfer">("game");
+  const [appMode, setAppMode] = useState<AppMode>("game");
+  // 📁 Hi ha un fitxer en moviment: el fons dinàmic puja d'activitat.
+  const [transferActive, setTransferActive] = useState(false);
   // 📁 Transfer està "ocupat" quan hi ha sala oberta: bloqueja el canvi d'eina.
   const [transferBusy, setTransferBusy] = useState(false);
   // 🎨 Color d'identitat de cada eina: 🎮 taronja · 🩺 cian · 📞 verd · 📁 violeta.
   const frameColor = appMode === "transfer" ? "violet" : appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
+  const fieldIntensity =
+    phase === "searching" || phase === "negotiating" ? 0.8 : appMode === "transfer" && transferActive ? 1 : 0.4;
 
   // Envia teclat, ratolí i comandament al Host pel canal "inputs". Ratolí i
   // tàctil escopats al `<canvas>` i només actius amb `controlActive` —
@@ -316,69 +344,49 @@ export default function App() {
     requestQuickAction(action);
   };
 
-  // 🆕 Selector d'eina (Jugar · Assistència · Trucada · Transfer). Bloquejat
-  // mentre s'intenta connectar o hi ha una sala de Transfer oberta.
+  // Selector d'eina. Bloquejat mentre es connecta o hi ha una sala de Transfer oberta.
+  const switchLocked = phase === "searching" || phase === "negotiating" || transferBusy;
   const modeSelector = (
-    <div className="flex mb-6 chamfer-sm border border-white/10 overflow-hidden">
-      <button
-        onClick={() => setAppMode("game")}
-        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
-        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
-          appMode === "game" ? "bg-orange-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
-        }`}
-      >
-        <AppIcon name="tool-game" fallback="🎮" size={16} /> Jugar
-      </button>
-      <button
-        onClick={() => setAppMode("assist")}
-        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
-        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
-          appMode === "assist" ? "bg-cyan-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
-        }`}
-      >
-        <AppIcon name="tool-assist" fallback="🩺" size={16} /> Assistència
-      </button>
-      <button
-        onClick={() => setAppMode("call")}
-        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
-        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
-          appMode === "call" ? "bg-emerald-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
-        }`}
-      >
-        <AppIcon name="tool-call" fallback="📞" size={16} /> Trucada
-      </button>
-      <button
-        onClick={() => setAppMode("transfer")}
-        disabled={phase === "searching" || phase === "negotiating" || transferBusy}
-        className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-widest transition-colors disabled:opacity-50 ${
-          appMode === "transfer" ? "bg-violet-500 text-black" : "bg-white/5 text-gray-400 hover:text-white"
-        }`}
-      >
-        <AppIcon name="tool-transfer" fallback="📁" size={16} /> Transfer
-      </button>
+    <div role="tablist" aria-label="Eina" className="panel chamfer-sm grid grid-cols-4 gap-1 p-1 mb-8">
+      {TOOLS.map((t) => (
+        <button
+          key={t.id}
+          role="tab"
+          aria-selected={appMode === t.id}
+          onClick={() => setAppMode(t.id)}
+          disabled={switchLocked}
+          className={`chamfer-sm flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 text-[11px] sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${
+            appMode === t.id ? `${t.on} shadow-lg` : "text-gray-400 hover:text-white hover:bg-white/5"
+          }`}
+        >
+          <ToolIcon name={t.icon} size={18} />
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-black relative overflow-hidden flex flex-col">
-      {/* Art de fons, la mateixa identitat "Compartir Joc" de l'app d'escriptori */}
-      {!bgFailed ? (
-        <img
-          src="/panels/compartir-joc.jpg"
-          alt=""
-          onError={() => setBgFailed(true)}
-          className="absolute inset-0 w-full h-full object-cover opacity-60"
-        />
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-950 via-black to-black grid-bg-stream" />
+    <div className="min-h-screen bg-[#05070a] relative overflow-hidden flex flex-col">
+      {/* Fons dinàmic: xarxa de nodes que canvia de color segons l'eina. No es dibuixa en streaming. */}
+      {phase !== "connected" && (
+        <>
+          <NetworkField accent={FIELD_ACCENT[appMode]} intensity={fieldIntensity} />
+          <div
+            aria-hidden
+            className="fixed inset-0 pointer-events-none transition-[background] duration-700"
+            style={{
+              background: `radial-gradient(ellipse 70% 50% at 50% 0%, rgba(${FIELD_GLOW[appMode]},0.12), transparent 70%), radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.72) 100%)`,
+            }}
+          />
+        </>
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/85 to-black" />
 
       {/* Barra de sistema */}
       <div className="relative z-10 flex items-center justify-between px-6 py-4 gap-3 flex-wrap">
         <div className="flex items-center gap-2.5 animate-fade-in-up">
           <Logo size={28} />
-          <span className="text-white font-extrabold text-sm tracking-[0.25em]">LVCLITS</span>
+          <span className="font-display text-white font-bold text-base tracking-[0.18em]">LVCLITS</span>
         </div>
         <div className="flex items-center gap-3 animate-fade-in-up">
           {appMode === "game" && (
@@ -416,9 +424,9 @@ export default function App() {
               ⬇ Instal·lar app
             </button>
           )}
-          <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-widest ${appMode === "transfer" ? "text-violet-400" : appMode === "call" ? "text-emerald-400" : appMode === "assist" ? "text-cyan-400" : "text-gray-400"}`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${appMode === "transfer" ? "bg-violet-400" : appMode === "call" ? "bg-emerald-400" : appMode === "assist" ? "bg-cyan-400" : "bg-orange-400"}`} />
-            {appMode === "transfer" ? "Sistema 05 · Transfer" : appMode === "call" ? "Sistema 04 · Trucada" : appMode === "assist" ? "Sistema 03 · Assistència" : "Sistema 02 · Streaming"}
+          <div className="flex items-center gap-2 text-xs font-medium text-gray-300 px-3 py-1.5 rounded-full border border-white/10 bg-white/5">
+            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${TOOLS.find((t) => t.id === appMode)!.dot}`} />
+            {TOOLS.find((t) => t.id === appMode)!.label}
           </div>
         </div>
       </div>
@@ -428,16 +436,14 @@ export default function App() {
           <div className="max-w-lg w-full animate-fade-in-up">
             {modeSelector}
             <div className="text-center mb-6">
-              <span className="text-xs uppercase tracking-widest font-semibold text-violet-300/80">📁 Intercanvi d'arxius</span>
-              <h1 className="text-4xl font-extrabold text-white tracking-tight mt-2">
-                Trans<span className="text-violet-400 drop-shadow-[0_0_20px_rgba(167,139,250,0.4)]">fer</span>
-              </h1>
+              <HeroBadge mode="transfer" />
+              <h1 className="text-4xl font-bold text-white tracking-tight">Transfer</h1>
               <p className="text-gray-400 text-sm mt-2">
                 Eina d'intercanvi d'arxius sense límits: P2P directe, sense pujar res a cap servidor i sense cap topall de
                 mida. Els dos escriviu la mateixa paraula i ja podeu enviar-vos fitxers en qualsevol direcció.
               </p>
             </div>
-            <TransferPanel onBusyChange={setTransferBusy} />
+            <TransferPanel onBusyChange={setTransferBusy} onActiveChange={setTransferActive} />
           </div>
         </div>
       ) : phase !== "connected" ? (
@@ -446,26 +452,9 @@ export default function App() {
             {modeSelector}
 
             <div className="text-center mb-8">
-              <span className={`text-xs uppercase tracking-widest font-semibold ${appMode === "call" ? "text-emerald-300/80" : appMode === "assist" ? "text-cyan-300/80" : "text-orange-300/80"}`}>
-                {appMode === "call" ? "📞 Només veu" : appMode === "assist" ? "🩺 Suport tècnic" : "🎮 Joc remot"}
-              </span>
-              <h1 className="text-4xl font-extrabold text-white tracking-tight mt-2">
-                {appMode === "call" ? (
-                  <>
-                    Trucada{" "}
-                    <span className="text-emerald-400 drop-shadow-[0_0_20px_rgba(52,211,153,0.4)]">directa</span>
-                  </>
-                ) : appMode === "assist" ? (
-                  <>
-                    Assistència{" "}
-                    <span className="text-cyan-400 drop-shadow-[0_0_20px_rgba(34,211,238,0.4)]">remota</span>
-                  </>
-                ) : (
-                  <>
-                    Jugar en{" "}
-                    <span className="text-orange-400 drop-shadow-[0_0_20px_rgba(251,146,60,0.4)]">remot</span>
-                  </>
-                )}
+              <HeroBadge mode={appMode} />
+              <h1 className="text-4xl font-bold text-white tracking-tight">
+                {appMode === "call" ? "Trucada directa" : appMode === "assist" ? "Assistència remota" : "Jugar en remot"}
               </h1>
               <p className="text-gray-400 text-sm mt-2">
                 {appMode === "call"
@@ -476,7 +465,7 @@ export default function App() {
               </p>
             </div>
 
-            <div className="relative animate-scale-in space-y-4 bg-white/5 border border-white/10 p-6 chamfer backdrop-blur-md shadow-xl">
+            <div className="relative animate-scale-in space-y-4 panel p-6 chamfer">
               <CornerFrame color={frameColor} />
               <input
                 type="text"
@@ -839,7 +828,7 @@ export default function App() {
       {showHostNotice && phase !== "connected" && (
         <div
           role="status"
-          className="fixed bottom-14 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md animate-fade-in-up"
+          className="fixed bottom-14 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md animate-fade-in-up lg:left-auto lg:right-6 lg:translate-x-0 lg:w-80"
         >
           <div className="relative bg-black/90 border border-cyan-400/40 chamfer-sm px-4 py-3 pr-10 backdrop-blur-md shadow-2xl shadow-cyan-500/10 text-left">
             <p className="text-cyan-300 text-[11px] font-semibold uppercase tracking-widest mb-1">

@@ -34,7 +34,7 @@ export default defineConfig({
         // sala carregui a l'instant i funcioni com una app instal·lada.
         // El vídeo en si mai passa per aquí — és sempre trànsit P2P en
         // directe, no un recurs cachejable.
-        globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
+        globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}"],
       },
     }),
   ],

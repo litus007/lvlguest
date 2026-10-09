@@ -105,7 +105,13 @@ function ItemRow({
   );
 }
 
-export default function TransferPanel({ onBusyChange }: { onBusyChange?: (busy: boolean) => void }) {
+export default function TransferPanel({
+  onBusyChange,
+  onActiveChange,
+}: {
+  onBusyChange?: (busy: boolean) => void;
+  onActiveChange?: (active: boolean) => void;
+}) {
   const { state, log, join, leave, sendFiles, accept, reject, cancel, chooseFolder, clearFolder } = useTransfer();
   const [codeInput, setCodeInput] = useState("");
   const [lanOnly, setLanOnly] = useState(false);
@@ -118,6 +124,12 @@ export default function TransferPanel({ onBusyChange }: { onBusyChange?: (busy: 
   useEffect(() => {
     onBusyChange?.(!idle);
   }, [idle, onBusyChange]);
+
+  // Avisa quan hi ha un fitxer en moviment (el fons dinàmic reacciona).
+  const moving = state.items.some((i) => i.status === "active");
+  useEffect(() => {
+    onActiveChange?.(moving);
+  }, [moving, onActiveChange]);
 
   const handleJoin = async () => {
     setFormError(null);
@@ -145,7 +157,7 @@ export default function TransferPanel({ onBusyChange }: { onBusyChange?: (busy: 
   return (
     <div className="w-full max-w-lg mx-auto space-y-4">
       {idle && (
-        <div className="relative space-y-4 bg-white/5 border border-white/10 p-6 chamfer backdrop-blur-md shadow-xl animate-scale-in">
+        <div className="relative space-y-4 panel p-6 chamfer animate-scale-in">
           <CornerFrame color="violet" />
           <input
             type="text"
@@ -167,7 +179,7 @@ export default function TransferPanel({ onBusyChange }: { onBusyChange?: (busy: 
             Inventa una paraula i digues-la a l'altra persona: qui l'escrigui primer crea la sala i el segon hi entra.
           </p>
           <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-            <input type="checkbox" checked={lanOnly} onChange={(e) => setLanOnly(e.target.checked)} />
+            <input type="checkbox" className="accent-violet-500" checked={lanOnly} onChange={(e) => setLanOnly(e.target.checked)} />
             📡 Només xarxa local (sense STUN/TURN)
           </label>
           {(formError || state.error) && (
@@ -177,7 +189,7 @@ export default function TransferPanel({ onBusyChange }: { onBusyChange?: (busy: 
       )}
 
       {(state.phase === "waiting" || state.phase === "connecting") && (
-        <div className="relative bg-white/5 border border-white/10 p-6 chamfer backdrop-blur-md text-center space-y-3">
+        <div className="relative panel p-6 chamfer text-center space-y-3">
           <CornerFrame color="violet" />
           <div className="w-12 h-12 mx-auto border-4 border-white/10 border-t-violet-400 rounded-full animate-spin" />
           <p className="text-gray-200 text-sm">
@@ -201,7 +213,7 @@ export default function TransferPanel({ onBusyChange }: { onBusyChange?: (busy: 
 
       {state.phase === "connected" && (
         <>
-          <div className="relative bg-white/5 border border-violet-400/30 p-4 chamfer backdrop-blur-md space-y-3">
+          <div className="relative panel p-4 chamfer space-y-3">
             <CornerFrame color="violet" />
             <div className="flex items-center justify-between text-xs">
               <span className="text-emerald-300">● Connectat · sala <span className="font-mono tracking-widest">{state.code}</span></span>
