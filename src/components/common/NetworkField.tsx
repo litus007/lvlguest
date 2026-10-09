@@ -59,7 +59,8 @@ export default function NetworkField({ accent = "brand", intensity = 0.4, classN
 
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const coarse = window.matchMedia("(pointer: coarse)").matches;
-    const minFrame = coarse ? 1000 / 30 : 0;
+    // 30 fps: la deriva és lenta i a 60 fps gastaria el doble sense que es notés.
+    const minFrame = 1000 / 30;
 
     let w = 0;
     let h = 0;
@@ -199,15 +200,26 @@ export default function NetworkField({ accent = "brand", intensity = 0.4, classN
     let last = 0;
     const frame = (ts: number) => {
       raf = requestAnimationFrame(frame);
-      if (document.hidden) {
-        last = ts;
-        return;
-      }
       const el = ts - last;
       if (el < minFrame) return;
       last = ts;
       step(Math.min(0.05, el / 1000));
       draw();
+    };
+    // Només anima quan la finestra és visible I té el focus: mentre jugues a
+    // un altre programa (o transmets) el fons no gasta ni CPU ni GPU.
+    const shouldRun = () => !document.hidden && document.hasFocus();
+    const sync = () => {
+      if (reduce) return;
+      if (shouldRun()) {
+        if (!raf) {
+          last = 0;
+          raf = requestAnimationFrame(frame);
+        }
+      } else if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
     };
 
     const onPointer = (e: PointerEvent) => {
@@ -224,10 +236,16 @@ export default function NetworkField({ accent = "brand", intensity = 0.4, classN
     if (!reduce) {
       window.addEventListener("pointermove", onPointer, { passive: true });
       document.addEventListener("pointerleave", onLeave);
-      raf = requestAnimationFrame(frame);
+      window.addEventListener("focus", sync);
+      window.addEventListener("blur", sync);
+      document.addEventListener("visibilitychange", sync);
+      sync();
     }
     return () => {
       cancelAnimationFrame(raf);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("blur", sync);
+      document.removeEventListener("visibilitychange", sync);
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", onPointer);
       document.removeEventListener("pointerleave", onLeave);

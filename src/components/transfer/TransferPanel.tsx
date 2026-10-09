@@ -105,12 +105,25 @@ function ItemRow({
   );
 }
 
+export interface TransferSummary {
+  phase: "idle" | "waiting" | "connecting" | "connected" | "failed";
+  code: string;
+  /** Fitxers movent-se ara mateix. */
+  moving: number;
+}
+
 export default function TransferPanel({
   onBusyChange,
   onActiveChange,
+  onSummary,
+  leaveRef,
 }: {
   onBusyChange?: (busy: boolean) => void;
   onActiveChange?: (active: boolean) => void;
+  /** Resum de la sessió (per al mini-panell de l'app d'escriptori). */
+  onSummary?: (summary: TransferSummary) => void;
+  /** Exposa "sortir de la sala" al pare (p. ex. per al botó "Acaba" del mini-panell). */
+  leaveRef?: { current: (() => void) | null };
 }) {
   const { state, log, join, leave, sendFiles, accept, reject, cancel, chooseFolder, clearFolder } = useTransfer();
   const [codeInput, setCodeInput] = useState("");
@@ -130,6 +143,17 @@ export default function TransferPanel({
   useEffect(() => {
     onActiveChange?.(moving);
   }, [moving, onActiveChange]);
+
+  const movingCount = state.items.filter((i) => i.status === "active").length;
+  useEffect(() => {
+    onSummary?.({ phase: state.phase, code: state.code, moving: movingCount });
+  }, [state.phase, state.code, movingCount, onSummary]);
+  useEffect(() => {
+    if (leaveRef) leaveRef.current = () => void leave();
+    return () => {
+      if (leaveRef) leaveRef.current = null;
+    };
+  }, [leaveRef, leave]);
 
   const handleJoin = async () => {
     setFormError(null);

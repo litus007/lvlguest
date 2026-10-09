@@ -104,6 +104,7 @@ h3 {
 }
 
 /* Superfície de panell: vidre fosc amb una vora superior de llum. */
+@layer components {
 .panel {
   --diag: linear-gradient(
     to bottom right,
@@ -113,14 +114,17 @@ h3 {
     transparent calc(50% + 0.8px)
   );
   position: relative;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* Sense backdrop-filter: desenfocar cada fotograma un canvas animat costa GPU. */
+  background: linear-gradient(180deg, rgba(24, 30, 40, 0.8), rgba(10, 13, 19, 0.74));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
   border: 1px solid rgba(255, 255, 255, 0.09);
 }
+}
 
-:focus-visible {
+/* Anell de focus per teclat només en controls sense vora pròpia de focus (botons, enllaços, pestanyes). */
+button:focus-visible,
+a:focus-visible,
+[role="tab"]:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.75);
   outline-offset: 2px;
 }
