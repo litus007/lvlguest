@@ -11,7 +11,25 @@ const Mic = ({ muted }: { muted: boolean }) => (
 );
 
 /** 📞 Trucada de veu entre navegadors (sense app ni Host), fins a 6 persones. */
-export default function WebCallPanel({ onBusyChange }: { onBusyChange?: (busy: boolean) => void }) {
+export interface WebCallSummary {
+  joined: boolean;
+  code: string;
+  people: number;
+  muted: boolean;
+}
+
+export default function WebCallPanel({
+  onBusyChange,
+  onSummary,
+  leaveRef,
+  muteRef,
+}: {
+  onBusyChange?: (busy: boolean) => void;
+  /** Resum de la trucada (per al mini-panell de l'app d'escriptori). */
+  onSummary?: (s: WebCallSummary) => void;
+  leaveRef?: { current: (() => void) | null };
+  muteRef?: { current: (() => void) | null };
+}) {
   const { state, code, join, leave, toggleMute } = useWebCall();
   const [codeInput, setCodeInput] = useState("");
   const [name, setName] = useState("");
@@ -19,6 +37,17 @@ export default function WebCallPanel({ onBusyChange }: { onBusyChange?: (busy: b
   const [copied, setCopied] = useState(false);
 
   useEffect(() => onBusyChange?.(state.joined), [state.joined, onBusyChange]);
+  useEffect(() => {
+    onSummary?.({ joined: state.joined, code, people: state.members.length + 1, muted: state.muted });
+  }, [state.joined, code, state.members.length, state.muted, onSummary]);
+  useEffect(() => {
+    if (leaveRef) leaveRef.current = () => void leave();
+    if (muteRef) muteRef.current = toggleMute;
+    return () => {
+      if (leaveRef) leaveRef.current = null;
+      if (muteRef) muteRef.current = null;
+    };
+  }, [leaveRef, muteRef, leave, toggleMute]);
 
   const go = async () => {
     setFormError(null);

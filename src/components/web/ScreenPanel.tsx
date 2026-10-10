@@ -4,7 +4,26 @@ import { supportsScreenCapture, type ContentHint } from "../../lib/screenShare";
 import CornerFrame from "../common/CornerFrame";
 
 /** 🖥️ Pantalla entre navegadors: compartir o mirar amb una paraula. */
-export default function ScreenPanel({ onBusyChange, onActiveChange }: { onBusyChange?: (busy: boolean) => void; onActiveChange?: (active: boolean) => void }) {
+export interface ScreenSummary {
+  active: boolean;
+  role: "share" | "watch" | null;
+  code: string;
+  viewers: number;
+  live: boolean;
+}
+
+export default function ScreenPanel({
+  onBusyChange,
+  onActiveChange,
+  onSummary,
+  leaveRef,
+}: {
+  onBusyChange?: (busy: boolean) => void;
+  onActiveChange?: (active: boolean) => void;
+  /** Resum de la sessió (per al mini-panell de l'app d'escriptori). */
+  onSummary?: (s: ScreenSummary) => void;
+  leaveRef?: { current: (() => void) | null };
+}) {
   const { state, start, stop } = useScreenShare();
   const [code, setCode] = useState("");
   const [hint, setHint] = useState<ContentHint>("detail");
@@ -19,6 +38,15 @@ export default function ScreenPanel({ onBusyChange, onActiveChange }: { onBusyCh
   useEffect(() => onBusyChange?.(!idle), [idle, onBusyChange]);
   const flowing = state.phase === "live" || (state.role === "share" && state.viewers > 0);
   useEffect(() => onActiveChange?.(flowing), [flowing, onActiveChange]);
+  useEffect(() => {
+    onSummary?.({ active: !idle, role: state.role, code: state.code, viewers: state.viewers, live: flowing });
+  }, [idle, state.role, state.code, state.viewers, flowing, onSummary]);
+  useEffect(() => {
+    if (leaveRef) leaveRef.current = () => void stop();
+    return () => {
+      if (leaveRef) leaveRef.current = null;
+    };
+  }, [leaveRef, stop]);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = state.stream;

@@ -92,6 +92,7 @@ presència + broadcast, sense taules; mateixa URL i anon key) i P2P WebRTC:
 | 📁 **Transfer** | Arxius sense límit de mida **i missatges de text/enllaços** per la mateixa connexió | 2 |
 | 🖥️ **Pantalla** | Una persona comparteix la pantalla (amb àudio de la pestanya si el navegador el dona); la resta mira. Optimitzable per a text/presentacions o vídeo/jocs | 1 + 4 |
 | 📞 **Trucada → "Entre navegadors"** | Veu en malla WebRTC, sense app ni Host | fins a 6 |
+| 🎨 **Pissarra** | Dibuix col·laboratiu en temps real: llapis, línia, fletxa, rectangle, el·lipse, text, goma, desfer, fons clar/fosc i descàrrega PNG. Els traços van P2P (data channels en malla), no per Supabase | fins a 6 |
 
 Només es pot compartir pantalla des d'un navegador d'escriptori; als mòbils només es pot mirar. Codi:
 `src/lib/screenShare.ts`, `src/lib/roomVoice.ts`, `src/lib/transferLink.ts` i els panells de `src/components/web/` i `src/components/transfer/`.
@@ -187,3 +188,18 @@ no aparèixer encara que tot estigui ben configurat, això és normal.
   finestra, igual que a l'app d'escriptori — en pantalles amb una
   relació d'aspecte molt diferent a la del Host, el mapeig pot no ser
   1:1 exacte.
+
+## 📱 Compatibilitat per dispositiu
+
+Cada eina mostra emojis amb el seu estat: 🖥️ Windows · 🍎 Mac · 🤖 Android · 📱 iPhone/iPad, amb ✅ funciona,
+⚠️ amb límits (i una nota que ho explica) o ❌ no disponible. Font única: `src/lib/compat.ts`.
+
+| Eina | 🖥️ | 🍎 | 🤖 | 📱 | Límit principal |
+|---|---|---|---|---|---|
+| Jugar / Assistència / Trucada (amb app) | ✅ | ⚠️ | ⚠️ | ⚠️ | Només com a convidat; l'amfitrió ha de ser Windows amb l'app |
+| Trucada entre navegadors | ✅ | ✅ | ✅ | ✅ | Safari demana tocar la pantalla per activar el so |
+| Transfer | ✅ | ✅ | ⚠️ | ⚠️ | Sense desat directe a disc: passa per la memòria |
+| Pantalla | ✅ | ✅ | ⚠️ | ⚠️ | Als mòbils només es pot mirar (no compartir) |
+| Pissarra | ✅ | ✅ | ✅ | ✅ | — |
+
+Aquesta taula es basa en el suport de les APIs de cada navegador; revisa-la amb els teus dispositius reals.

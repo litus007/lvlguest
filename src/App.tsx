@@ -9,6 +9,9 @@ import AppIcon from "./components/common/AppIcon";
 import TransferPanel from "./components/transfer/TransferPanel";
 import ScreenPanel from "./components/web/ScreenPanel";
 import WebCallPanel from "./components/web/WebCallPanel";
+import BoardPanel from "./components/web/BoardPanel";
+import CompatBadges from "./components/common/CompatBadges";
+import type { CompatTool } from "./lib/compat";
 import NetworkField, { type FieldAccent } from "./components/common/NetworkField";
 import ToolIcon, { type ToolIconName } from "./components/common/ToolIcon";
 
@@ -109,7 +112,7 @@ function ChatPanel({
   );
 }
 
-type AppMode = "game" | "assist" | "call" | "transfer" | "screen";
+type AppMode = "game" | "assist" | "call" | "transfer" | "screen" | "board";
 
 // Classes literals perquè Tailwind les detecti.
 const TOOLS: { id: AppMode; label: string; icon: ToolIconName; on: string; dot: string; badge: string; glow: string }[] = [
@@ -118,9 +121,10 @@ const TOOLS: { id: AppMode; label: string; icon: ToolIconName; on: string; dot: 
   { id: "call", label: "Trucada", icon: "call", on: "bg-emerald-500 text-black shadow-emerald-500/30", dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-300", glow: "drop-shadow-[0_0_16px_rgba(52,211,153,0.55)]" },
   { id: "transfer", label: "Transfer", icon: "transfer", on: "bg-violet-500 text-black shadow-violet-500/30", dot: "bg-violet-400", badge: "bg-violet-500/15 text-violet-300", glow: "drop-shadow-[0_0_16px_rgba(167,139,250,0.55)]" },
   { id: "screen", label: "Pantalla", icon: "stream", on: "bg-rose-500 text-black shadow-rose-500/30", dot: "bg-rose-400", badge: "bg-rose-500/15 text-rose-300", glow: "drop-shadow-[0_0_16px_rgba(251,113,133,0.55)]" },
+  { id: "board", label: "Pissarra", icon: "board", on: "bg-amber-400 text-black shadow-amber-400/30", dot: "bg-amber-400", badge: "bg-amber-400/15 text-amber-300", glow: "drop-shadow-[0_0_16px_rgba(251,191,36,0.55)]" },
 ];
-const FIELD_ACCENT: Record<AppMode, FieldAccent> = { game: "orange", assist: "cyan", call: "emerald", transfer: "violet", screen: "rose" };
-const FIELD_GLOW: Record<AppMode, string> = { game: "251,146,60", assist: "34,211,238", call: "52,211,153", transfer: "167,139,250", screen: "251,113,133" };
+const FIELD_ACCENT: Record<AppMode, FieldAccent> = { game: "orange", assist: "cyan", call: "emerald", transfer: "violet", screen: "rose", board: "amber" };
+const FIELD_GLOW: Record<AppMode, string> = { game: "251,146,60", assist: "34,211,238", call: "52,211,153", transfer: "167,139,250", screen: "251,113,133", board: "251,191,36" };
 
 function HeroBadge({ mode }: { mode: AppMode }) {
   const t = TOOLS.find((x) => x.id === mode)!;
@@ -201,9 +205,9 @@ export default function App() {
   // Trucada: amb l'app d'escriptori (Host) o directament entre navegadors.
   const [callVia, setCallVia] = useState<"app" | "web">("app");
   // Eines que funcionen web ↔ web, sense Host.
-  const isWebTool = appMode === "transfer" || appMode === "screen" || (appMode === "call" && callVia === "web");
+  const isWebTool = appMode === "transfer" || appMode === "screen" || appMode === "board" || (appMode === "call" && callVia === "web");
   // 🎨 Color d'identitat de cada eina: 🎮 taronja · 🩺 cian · 📞 verd · 📁 violeta.
-  const frameColor = appMode === "screen" ? "rose" : appMode === "transfer" ? "violet" : appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
+  const frameColor = appMode === "board" ? "amber" : appMode === "screen" ? "rose" : appMode === "transfer" ? "violet" : appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
   const fieldIntensity =
     phase === "searching" || phase === "negotiating" ? 0.8 : isWebTool && transferActive ? 1 : 0.4;
 
@@ -288,7 +292,7 @@ export default function App() {
   };
 
   const handleConnect = () => {
-    if (appMode === "transfer" || appMode === "screen" || !roomCodeInput.trim()) return;
+    if (appMode === "transfer" || appMode === "screen" || appMode === "board" || !roomCodeInput.trim()) return;
     if (appMode === "call" && callVia === "web") return; // la trucada entre navegadors té el seu propi panell
     connect(roomCodeInput, lanOnly, appMode);
   };
@@ -355,7 +359,7 @@ export default function App() {
   // Selector d'eina. Bloquejat mentre es connecta o hi ha una sala de Transfer oberta.
   const switchLocked = phase === "searching" || phase === "negotiating" || transferBusy;
   const modeSelector = (
-    <div role="tablist" aria-label="Eina" className="panel chamfer-sm grid grid-cols-5 gap-1 p-1 mb-8">
+    <div role="tablist" aria-label="Eina" className="panel chamfer-sm grid grid-cols-3 sm:grid-cols-6 gap-1 p-1 mb-8">
       {TOOLS.map((t) => (
         <button
           key={t.id}
@@ -363,7 +367,7 @@ export default function App() {
           aria-selected={appMode === t.id}
           onClick={() => setAppMode(t.id)}
           disabled={switchLocked}
-          className={`chamfer-sm flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 text-[10px] sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${
+          className={`chamfer-sm flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 text-[11px] sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${
             appMode === t.id ? `${t.on} shadow-lg` : "text-gray-400 hover:text-white hover:bg-white/5"
           }`}
         >
@@ -373,6 +377,10 @@ export default function App() {
       ))}
     </div>
   );
+
+  const compatKey: CompatTool =
+    appMode === "game" ? "stream" : appMode === "call" ? (callVia === "web" ? "callweb" : "call") : appMode;
+  const wideBoard = appMode === "board" && transferBusy;
 
   const viaSwitch = appMode === "call" && (
     <div role="radiogroup" aria-label="Com vols fer la trucada" className="flex text-xs chamfer-sm overflow-hidden border border-white/10 mb-6">
@@ -457,24 +465,31 @@ export default function App() {
       </div>
 
       {isWebTool ? (
-        <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-4">
-          <div className="max-w-lg w-full animate-fade-in-up">
+        <div className="relative z-10 flex-1 flex items-center justify-center px-4 sm:px-6 py-4">
+          <div className={`${wideBoard ? "max-w-5xl" : "max-w-lg"} w-full animate-fade-in-up`}>
             {modeSelector}
             {viaSwitch}
-            <div className="text-center mb-6">
-              <HeroBadge mode={appMode} />
-              <h1 className="text-4xl font-bold text-white tracking-tight">
-                {appMode === "screen" ? "Pantalla" : appMode === "call" ? "Trucada entre navegadors" : "Transfer"}
-              </h1>
-              <p className="text-gray-400 text-sm mt-2">
-                {appMode === "screen"
-                  ? "Comparteix la teva pantalla amb altres persones des del navegador, sense instal·lar res. Una persona comparteix i fins a 4 miren, tots amb la mateixa paraula."
-                  : appMode === "call"
-                  ? "Parla amb fins a 6 persones directament des del navegador: sense app ni Host. Tothom escriu la mateixa paraula i ja es sent."
-                  : "Eina d'intercanvi d'arxius sense límits: P2P directe, sense pujar res a cap servidor i sense cap topall de mida. També pots enviar-vos text i enllaços."}
-              </p>
-            </div>
-            {appMode === "screen" ? (
+            {!wideBoard && (
+              <div className="text-center mb-6">
+                <HeroBadge mode={appMode} />
+                <h1 className="text-4xl font-bold text-white tracking-tight">
+                  {appMode === "board" ? "Pissarra" : appMode === "screen" ? "Pantalla" : appMode === "call" ? "Trucada entre navegadors" : "Transfer"}
+                </h1>
+                <p className="text-gray-400 text-sm mt-2">
+                  {appMode === "board"
+                    ? "Dibuixa en temps real amb altres persones: llapis, formes, fletxes i text. Tothom escriu la mateixa paraula i veu els traços a l'instant."
+                    : appMode === "screen"
+                    ? "Comparteix la teva pantalla amb altres persones des del navegador, sense instal·lar res. Una persona comparteix i fins a 4 miren, tots amb la mateixa paraula."
+                    : appMode === "call"
+                    ? "Parla amb fins a 6 persones directament des del navegador: sense app ni Host. Tothom escriu la mateixa paraula i ja es sent."
+                    : "Eina d'intercanvi d'arxius sense límits: P2P directe, sense pujar res a cap servidor i sense cap topall de mida. També pots enviar-vos text i enllaços."}
+                </p>
+                <CompatBadges tool={compatKey} showNotes className="mt-3 flex flex-col items-center text-center" />
+              </div>
+            )}
+            {appMode === "board" ? (
+              <BoardPanel onBusyChange={setTransferBusy} />
+            ) : appMode === "screen" ? (
               <ScreenPanel onBusyChange={setTransferBusy} onActiveChange={setTransferActive} />
             ) : appMode === "call" ? (
               <WebCallPanel onBusyChange={setTransferBusy} />
@@ -501,6 +516,7 @@ export default function App() {
                   ? "Introdueix el codi de sessió que et doni qui necessita ajuda. Un cop connectat, podràs veure la seva pantalla, controlar el teclat i el ratolí, consultar l'estat del seu PC i enviar-li arxius."
                   : "Introdueix el codi de sala. Un cop connectat, el teclat, el ratolí i el comandament controlaran el joc del Host."}
               </p>
+              <CompatBadges tool={compatKey} showNotes className="mt-3 flex flex-col items-center text-center" />
             </div>
 
             <div className="relative animate-scale-in space-y-4 panel p-6 chamfer">
@@ -915,7 +931,9 @@ export default function App() {
 
       <footer className="relative z-10 text-center pb-4">
         <p className="text-gray-500 text-[10px] tracking-widest uppercase">
-          {appMode === "screen"
+          {appMode === "board"
+            ? "LVCLITS Platform · Pissarra compartida"
+            : appMode === "screen"
             ? "LVCLITS Platform · Pantalla (web ↔ web)"
             : appMode === "transfer"
             ? "LVCLITS Platform · Transfer (arxius sense límits, P2P)"

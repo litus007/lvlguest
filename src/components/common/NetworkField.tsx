@@ -12,7 +12,7 @@ import { useEffect, useRef } from "react";
  * pantalles tàctils i, amb "reduir moviment", es queda en una imatge fixa.
  */
 
-export type FieldAccent = "orange" | "cyan" | "emerald" | "violet" | "rose" | "brand";
+export type FieldAccent = "orange" | "cyan" | "emerald" | "violet" | "rose" | "amber" | "brand";
 
 type RGB = [number, number, number];
 const PALETTE: Record<FieldAccent, { main: RGB; packet: RGB }> = {
@@ -20,6 +20,7 @@ const PALETTE: Record<FieldAccent, { main: RGB; packet: RGB }> = {
   cyan: { main: [34, 211, 238], packet: [190, 245, 252] },
   emerald: { main: [52, 211, 153], packet: [190, 250, 225] },
   violet: { main: [167, 139, 250], packet: [225, 215, 255] },
+  amber: { main: [251, 191, 36], packet: [253, 230, 138] },
   rose: { main: [251, 113, 133], packet: [255, 205, 212] },
   // Identitat de marca (logo): nodes cian, paquets taronja.
   brand: { main: [34, 211, 238], packet: [251, 146, 60] },

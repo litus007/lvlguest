@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-export type ToolIconName = "lan" | "stream" | "game" | "assist" | "call" | "transfer";
+export type ToolIconName = "lan" | "stream" | "game" | "assist" | "call" | "transfer" | "board";
 
 /**
  * Icones de línia pròpies de cada eina (en lloc d'emojis), amb cantonades
@@ -36,6 +36,12 @@ const PATHS: Record<ToolIconName, ReactElement> = {
   ),
   call: <path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1C10.7 20 4 13.3 4 5a1 1 0 0 1 1-1Z" />,
   transfer: <path d="M7 20V5M3.5 8.5 7 5l3.5 3.5M17 4v15M13.5 15.5 17 19l3.5-3.5" />,
+  board: (
+    <>
+      <path d="M3 4h18v11.5H3zM8 20l1.5-4.5M16 20l-1.5-4.5" />
+      <path d="M7 12.5c1.6-3.2 3-.2 4.6-2.2s2.3-2.6 5.4-1" />
+    </>
+  ),
 };
 
 export default function ToolIcon({ name, size = 20, className = "" }: { name: ToolIconName; size?: number; className?: string }) {
