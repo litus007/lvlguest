@@ -1,11 +1,12 @@
 interface CornerFrameProps {
-  color?: "cyan" | "orange" | "emerald" | "violet";
+  color?: "cyan" | "orange" | "emerald" | "violet" | "rose";
 }
 
 const COLOR_MAP: Record<string, string> = {
   cyan: "border-cyan-400/80 drop-shadow-[0_0_5px_rgba(34,211,238,0.7)]",
   orange: "border-orange-400/80 drop-shadow-[0_0_5px_rgba(251,146,60,0.7)]",
   emerald: "border-emerald-400/80 drop-shadow-[0_0_5px_rgba(52,211,153,0.7)]",
+  rose: "border-rose-400/80 drop-shadow-[0_0_5px_rgba(251,113,133,0.7)]",
   violet: "border-violet-400/80 drop-shadow-[0_0_5px_rgba(167,139,250,0.7)]",
 };
 

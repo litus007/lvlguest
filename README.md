@@ -82,6 +82,20 @@ obrir-ne una cal l'app. Sentir l'altra banda és automàtic; el botó del
 micròfon només controla l'enviament. Cal Chrome o Edge per enviar veu
 (`MediaStreamTrackProcessor` + `AudioEncoder`).
 
+## 🌐 Eines web ↔ web (sense Host ni app d'escriptori)
+
+Tres eines funcionen directament entre navegadors, amb el mateix sistema de **paraula** (canal Supabase amb
+presència + broadcast, sense taules; mateixa URL i anon key) i P2P WebRTC:
+
+| Eina | Què fa | Persones |
+|---|---|---|
+| 📁 **Transfer** | Arxius sense límit de mida **i missatges de text/enllaços** per la mateixa connexió | 2 |
+| 🖥️ **Pantalla** | Una persona comparteix la pantalla (amb àudio de la pestanya si el navegador el dona); la resta mira. Optimitzable per a text/presentacions o vídeo/jocs | 1 + 4 |
+| 📞 **Trucada → "Entre navegadors"** | Veu en malla WebRTC, sense app ni Host | fins a 6 |
+
+Només es pot compartir pantalla des d'un navegador d'escriptori; als mòbils només es pot mirar. Codi:
+`src/lib/screenShare.ts`, `src/lib/roomVoice.ts`, `src/lib/transferLink.ts` i els panells de `src/components/web/` i `src/components/transfer/`.
+
 ## 📁 Transfer — intercanvi d'arxius sense límits (eina 5)
 
 Eina d'**intercanvi d'arxius sense límits**: P2P directe (WebRTC), res no es

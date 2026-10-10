@@ -38,7 +38,7 @@ const DISCONNECT_GRACE_MS = 8_000;
 export const MIN_CODE_LENGTH = 3;
 
 // Mateixos servidors STUN/TURN que la resta d'eines de LVCLITS.
-const ICE_SERVERS: RTCIceServer[] = [
+export const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun.relay.metered.ca:80" },
   {
@@ -74,6 +74,15 @@ export interface TransferItem {
   note?: string;
 }
 
+export interface TransferMessage {
+  id: string;
+  mine: boolean;
+  text: string;
+  at: number;
+}
+
+export const MAX_MESSAGE_LENGTH = 4000;
+
 export interface TransferState {
   phase: TransferPhase;
   code: string;
@@ -81,6 +90,8 @@ export interface TransferState {
   /** Missatge informatiu (p. ex. "L'altra persona ha marxat"). */
   notice: string | null;
   items: TransferItem[];
+  /** Missatges de text (enllaços, contrasenyes, notes…) enviats per la mateixa connexió. */
+  messages: TransferMessage[];
   /** Nom de la carpeta de desat automàtic, si l'usuari n'ha triat una. */
   dirName: string | null;
   canSaveToDisk: boolean;
@@ -123,6 +134,7 @@ export function initialTransferState(): TransferState {
     error: null,
     notice: null,
     items: [],
+    messages: [],
     dirName: null,
     canSaveToDisk: supportsDiskStreaming(),
     canPickFolder: supportsFolderPicker(),
@@ -136,7 +148,8 @@ type Ctl =
   | { t: "reject"; id: string }
   | { t: "cancel"; id: string }
   | { t: "end"; id: string }
-  | { t: "ack"; id: string; n: number };
+  | { t: "ack"; id: string; n: number }
+  | { t: "msg"; id: string; text: string };
 
 interface SignalMsg {
   from: string;
@@ -605,6 +618,19 @@ export class TransferSession {
     this.files.delete(id);
   }
 
+  /** Envia un missatge de text a l'altra persona (per la mateixa connexió directa). */
+  sendText(text: string) {
+    const clean = text.trim().slice(0, MAX_MESSAGE_LENGTH);
+    if (!clean || this.dc?.readyState !== "open") return;
+    const id = newId();
+    this.sendCtl({ t: "msg", id, text: clean });
+    this.addMessage({ id, mine: true, text: clean, at: Date.now() });
+  }
+
+  private addMessage(m: TransferMessage) {
+    this.patchState({ messages: [...this.state.messages, m].slice(-100) });
+  }
+
   /** Tria una carpeta: els fitxers entrants s'hi desen sols, sense preguntar. */
   async chooseFolder(): Promise<void> {
     if (!supportsFolderPicker()) return;
@@ -712,6 +738,11 @@ export class TransferSession {
         this.ackWaiter?.();
         break;
       }
+      case "msg":
+        if (typeof msg.text === "string" && msg.text.length > 0) {
+          this.addMessage({ id: String(msg.id), mine: false, text: msg.text.slice(0, MAX_MESSAGE_LENGTH), at: Date.now() });
+        }
+        break;
       case "ack":
         this.acked.set(msg.id, Math.max(this.acked.get(msg.id) ?? 0, Number(msg.n) || 0));
         this.ackWaiter?.();

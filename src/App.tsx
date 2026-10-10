@@ -7,6 +7,8 @@ import PingBadge from "./components/common/PingBadge";
 import VirtualGamepad from "./components/common/VirtualGamepad";
 import AppIcon from "./components/common/AppIcon";
 import TransferPanel from "./components/transfer/TransferPanel";
+import ScreenPanel from "./components/web/ScreenPanel";
+import WebCallPanel from "./components/web/WebCallPanel";
 import NetworkField, { type FieldAccent } from "./components/common/NetworkField";
 import ToolIcon, { type ToolIconName } from "./components/common/ToolIcon";
 
@@ -107,7 +109,7 @@ function ChatPanel({
   );
 }
 
-type AppMode = "game" | "assist" | "call" | "transfer";
+type AppMode = "game" | "assist" | "call" | "transfer" | "screen";
 
 // Classes literals perquè Tailwind les detecti.
 const TOOLS: { id: AppMode; label: string; icon: ToolIconName; on: string; dot: string; badge: string; glow: string }[] = [
@@ -115,9 +117,10 @@ const TOOLS: { id: AppMode; label: string; icon: ToolIconName; on: string; dot: 
   { id: "assist", label: "Assistència", icon: "assist", on: "bg-cyan-500 text-black shadow-cyan-500/30", dot: "bg-cyan-400", badge: "bg-cyan-500/15 text-cyan-300", glow: "drop-shadow-[0_0_16px_rgba(34,211,238,0.55)]" },
   { id: "call", label: "Trucada", icon: "call", on: "bg-emerald-500 text-black shadow-emerald-500/30", dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-300", glow: "drop-shadow-[0_0_16px_rgba(52,211,153,0.55)]" },
   { id: "transfer", label: "Transfer", icon: "transfer", on: "bg-violet-500 text-black shadow-violet-500/30", dot: "bg-violet-400", badge: "bg-violet-500/15 text-violet-300", glow: "drop-shadow-[0_0_16px_rgba(167,139,250,0.55)]" },
+  { id: "screen", label: "Pantalla", icon: "stream", on: "bg-rose-500 text-black shadow-rose-500/30", dot: "bg-rose-400", badge: "bg-rose-500/15 text-rose-300", glow: "drop-shadow-[0_0_16px_rgba(251,113,133,0.55)]" },
 ];
-const FIELD_ACCENT: Record<AppMode, FieldAccent> = { game: "orange", assist: "cyan", call: "emerald", transfer: "violet" };
-const FIELD_GLOW: Record<AppMode, string> = { game: "251,146,60", assist: "34,211,238", call: "52,211,153", transfer: "167,139,250" };
+const FIELD_ACCENT: Record<AppMode, FieldAccent> = { game: "orange", assist: "cyan", call: "emerald", transfer: "violet", screen: "rose" };
+const FIELD_GLOW: Record<AppMode, string> = { game: "251,146,60", assist: "34,211,238", call: "52,211,153", transfer: "167,139,250", screen: "251,113,133" };
 
 function HeroBadge({ mode }: { mode: AppMode }) {
   const t = TOOLS.find((x) => x.id === mode)!;
@@ -195,10 +198,14 @@ export default function App() {
   const [transferActive, setTransferActive] = useState(false);
   // 📁 Transfer està "ocupat" quan hi ha sala oberta: bloqueja el canvi d'eina.
   const [transferBusy, setTransferBusy] = useState(false);
+  // Trucada: amb l'app d'escriptori (Host) o directament entre navegadors.
+  const [callVia, setCallVia] = useState<"app" | "web">("app");
+  // Eines que funcionen web ↔ web, sense Host.
+  const isWebTool = appMode === "transfer" || appMode === "screen" || (appMode === "call" && callVia === "web");
   // 🎨 Color d'identitat de cada eina: 🎮 taronja · 🩺 cian · 📞 verd · 📁 violeta.
-  const frameColor = appMode === "transfer" ? "violet" : appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
+  const frameColor = appMode === "screen" ? "rose" : appMode === "transfer" ? "violet" : appMode === "call" ? "emerald" : appMode === "assist" ? "cyan" : "orange";
   const fieldIntensity =
-    phase === "searching" || phase === "negotiating" ? 0.8 : appMode === "transfer" && transferActive ? 1 : 0.4;
+    phase === "searching" || phase === "negotiating" ? 0.8 : isWebTool && transferActive ? 1 : 0.4;
 
   // Envia teclat, ratolí i comandament al Host pel canal "inputs". Ratolí i
   // tàctil escopats al `<canvas>` i només actius amb `controlActive` —
@@ -281,7 +288,8 @@ export default function App() {
   };
 
   const handleConnect = () => {
-    if (appMode === "transfer" || !roomCodeInput.trim()) return;
+    if (appMode === "transfer" || appMode === "screen" || !roomCodeInput.trim()) return;
+    if (appMode === "call" && callVia === "web") return; // la trucada entre navegadors té el seu propi panell
     connect(roomCodeInput, lanOnly, appMode);
   };
 
@@ -347,7 +355,7 @@ export default function App() {
   // Selector d'eina. Bloquejat mentre es connecta o hi ha una sala de Transfer oberta.
   const switchLocked = phase === "searching" || phase === "negotiating" || transferBusy;
   const modeSelector = (
-    <div role="tablist" aria-label="Eina" className="panel chamfer-sm grid grid-cols-4 gap-1 p-1 mb-8">
+    <div role="tablist" aria-label="Eina" className="panel chamfer-sm grid grid-cols-5 gap-1 p-1 mb-8">
       {TOOLS.map((t) => (
         <button
           key={t.id}
@@ -355,12 +363,29 @@ export default function App() {
           aria-selected={appMode === t.id}
           onClick={() => setAppMode(t.id)}
           disabled={switchLocked}
-          className={`chamfer-sm flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 text-[11px] sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${
+          className={`chamfer-sm flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 text-[10px] sm:text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${
             appMode === t.id ? `${t.on} shadow-lg` : "text-gray-400 hover:text-white hover:bg-white/5"
           }`}
         >
           <ToolIcon name={t.icon} size={18} />
           {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const viaSwitch = appMode === "call" && (
+    <div role="radiogroup" aria-label="Com vols fer la trucada" className="flex text-xs chamfer-sm overflow-hidden border border-white/10 mb-6">
+      {([["app", "Amb l'app d'escriptori"], ["web", "Entre navegadors"]] as const).map(([v, label]) => (
+        <button
+          key={v}
+          role="radio"
+          aria-checked={callVia === v}
+          onClick={() => setCallVia(v)}
+          disabled={switchLocked}
+          className={`flex-1 py-2.5 font-semibold transition-colors disabled:opacity-50 ${callVia === v ? "bg-emerald-500/25 text-emerald-100" : "text-gray-400 hover:text-white"}`}
+        >
+          {label}
         </button>
       ))}
     </div>
@@ -431,19 +456,31 @@ export default function App() {
         </div>
       </div>
 
-      {appMode === "transfer" ? (
+      {isWebTool ? (
         <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-4">
           <div className="max-w-lg w-full animate-fade-in-up">
             {modeSelector}
+            {viaSwitch}
             <div className="text-center mb-6">
-              <HeroBadge mode="transfer" />
-              <h1 className="text-4xl font-bold text-white tracking-tight">Transfer</h1>
+              <HeroBadge mode={appMode} />
+              <h1 className="text-4xl font-bold text-white tracking-tight">
+                {appMode === "screen" ? "Pantalla" : appMode === "call" ? "Trucada entre navegadors" : "Transfer"}
+              </h1>
               <p className="text-gray-400 text-sm mt-2">
-                Eina d'intercanvi d'arxius sense límits: P2P directe, sense pujar res a cap servidor i sense cap topall de
-                mida. Els dos escriviu la mateixa paraula i ja podeu enviar-vos fitxers en qualsevol direcció.
+                {appMode === "screen"
+                  ? "Comparteix la teva pantalla amb altres persones des del navegador, sense instal·lar res. Una persona comparteix i fins a 4 miren, tots amb la mateixa paraula."
+                  : appMode === "call"
+                  ? "Parla amb fins a 6 persones directament des del navegador: sense app ni Host. Tothom escriu la mateixa paraula i ja es sent."
+                  : "Eina d'intercanvi d'arxius sense límits: P2P directe, sense pujar res a cap servidor i sense cap topall de mida. També pots enviar-vos text i enllaços."}
               </p>
             </div>
-            <TransferPanel onBusyChange={setTransferBusy} onActiveChange={setTransferActive} />
+            {appMode === "screen" ? (
+              <ScreenPanel onBusyChange={setTransferBusy} onActiveChange={setTransferActive} />
+            ) : appMode === "call" ? (
+              <WebCallPanel onBusyChange={setTransferBusy} />
+            ) : (
+              <TransferPanel onBusyChange={setTransferBusy} onActiveChange={setTransferActive} />
+            )}
           </div>
         </div>
       ) : phase !== "connected" ? (
@@ -451,6 +488,7 @@ export default function App() {
           <div className="max-w-md w-full animate-fade-in-up">
             {modeSelector}
 
+            {viaSwitch}
             <div className="text-center mb-8">
               <HeroBadge mode={appMode} />
               <h1 className="text-4xl font-bold text-white tracking-tight">
@@ -832,30 +870,29 @@ export default function App() {
         >
           <div className="relative bg-black/90 border border-cyan-400/40 chamfer-sm px-4 py-3 pr-10 backdrop-blur-md shadow-2xl shadow-cyan-500/10 text-left">
             <p className="text-cyan-300 text-[11px] font-semibold uppercase tracking-widest mb-1">
-              ℹ️ Cal l'app d'escriptori a l'altra banda
+              {isWebTool ? "ℹ️ Funciona entre navegadors" : "ℹ️ Cal l'app d'escriptori a l'altra banda"}
             </p>
-            {appMode === "transfer" ? (
+            {isWebTool ? (
               <p className="text-gray-300 text-xs leading-relaxed">
-                <span className="text-white font-semibold">Transfer és l'excepció:</span> no necessita Host. Funciona
-                entre dues webs, entre web i app d'escriptori, o entre dues apps — només cal que tots dos entreu amb la
-                mateixa paraula.
+                <span className="text-white font-semibold">Aquesta eina funciona entre navegadors:</span> no necessita
+                Host ni l'app d'escriptori. Només cal que tothom entri amb la mateixa paraula.
               </p>
             ) : (
             <p className="text-gray-300 text-xs leading-relaxed">
               Aquesta web és només el costat <span className="text-white font-semibold">Guest</span>. Totes les eines
               (Jugar, Assistència i Trucada) es connecten sempre a un{" "}
               <span className="text-white font-semibold">Host d'escriptori</span> amb l'app LVCLITS oberta. No
-              funcionen entre dues webs (excepte Transfer).
+              funcionen entre dues webs (excepte Transfer, Pantalla i Trucada entre navegadors).
             </p>
             )}
-            {appMode !== "assist" && appMode !== "transfer" && (
+            {appMode !== "assist" && !isWebTool && (
               <p className="text-gray-400 text-[11px] mt-1.5">
                 {appMode === "call"
                   ? "A una trucada hi poden entrar fins a 8 persones amb el mateix codi, i tothom se sent amb tothom."
                   : "A una partida hi poden jugar fins a 4 persones amb el mateix codi. El jugador 1 controla teclat, ratolí i mando; la resta, només el seu mando."}
               </p>
             )}
-            {appMode !== "transfer" && (
+            {!isWebTool && (
             <p className="text-gray-400 text-[11px] mt-1.5">
               Ara: l'altra persona ha d'obrir{" "}
               <span className="text-gray-200 font-semibold">
@@ -878,7 +915,9 @@ export default function App() {
 
       <footer className="relative z-10 text-center pb-4">
         <p className="text-gray-500 text-[10px] tracking-widest uppercase">
-          {appMode === "transfer"
+          {appMode === "screen"
+            ? "LVCLITS Platform · Pantalla (web ↔ web)"
+            : appMode === "transfer"
             ? "LVCLITS Platform · Transfer (arxius sense límits, P2P)"
             : appMode === "call"
             ? "LVCLITS Platform · Trucada Directa (només veu)"

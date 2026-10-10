@@ -53,6 +53,7 @@ export function useTransfer() {
     log,
     join,
     leave,
+    sendText: useCallback((text: string) => sessionRef.current?.sendText(text), []),
     sendFiles: useCallback((files: File[]) => sessionRef.current?.sendFiles(files), []),
     accept: useCallback((id: string) => void sessionRef.current?.acceptIncoming(id), []),
     reject: useCallback((id: string) => sessionRef.current?.rejectIncoming(id), []),

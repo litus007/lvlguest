@@ -125,7 +125,14 @@ export default function TransferPanel({
   /** Exposa "sortir de la sala" al pare (p. ex. per al botó "Acaba" del mini-panell). */
   leaveRef?: { current: (() => void) | null };
 }) {
-  const { state, log, join, leave, sendFiles, accept, reject, cancel, chooseFolder, clearFolder } = useTransfer();
+  const { state, log, join, leave, sendFiles, sendText, accept, reject, cancel, chooseFolder, clearFolder } = useTransfer();
+  const [draft, setDraft] = useState("");
+  const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
+  const send = () => {
+    if (!draft.trim()) return;
+    sendText(draft);
+    setDraft("");
+  };
   const [codeInput, setCodeInput] = useState("");
   const [lanOnly, setLanOnly] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -291,6 +298,54 @@ export default function TransferPanel({
                 descarregar-se. Per a arxius molt grans fes servir Chrome o Edge d'escriptori.
               </p>
             )}
+          </div>
+
+          {/* Xat de text: enllaços, contrasenyes, notes… per la mateixa connexió directa. */}
+          <div className="panel chamfer p-4 space-y-3">
+            {state.messages.length > 0 && (
+              <div className="max-h-44 overflow-y-auto space-y-2 pr-1">
+                {state.messages.map((m) => (
+                  <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`group max-w-[85%] chamfer-sm px-3 py-2 text-sm break-words whitespace-pre-wrap ${
+                        m.mine ? "bg-violet-500/20 text-violet-50" : "bg-white/[0.07] text-gray-100"
+                      }`}
+                    >
+                      {m.text}
+                      <button
+                        onClick={() => {
+                          void navigator.clipboard.writeText(m.text).then(() => {
+                            setCopiedMsg(m.id);
+                            setTimeout(() => setCopiedMsg(null), 1200);
+                          });
+                        }}
+                        className="ml-2 text-[11px] text-gray-400 hover:text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                      >
+                        {copiedMsg === m.id ? "Copiat" : "Copia"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && send()}
+                placeholder="Envia un missatge o un enllaç"
+                aria-label="Missatge"
+                maxLength={4000}
+                className="flex-1 min-w-0 bg-black/40 border border-white/10 chamfer-sm px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-violet-400/60"
+              />
+              <button
+                onClick={send}
+                disabled={!draft.trim()}
+                className="chamfer-sm px-4 py-2 text-sm font-semibold bg-violet-500 hover:bg-violet-400 text-black disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                Envia
+              </button>
+            </div>
           </div>
 
           {state.items.length > 0 && (
