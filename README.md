@@ -91,7 +91,7 @@ presència + broadcast, sense taules; mateixa URL i anon key) i P2P WebRTC:
 |---|---|---|
 | 📁 **Transfer** | Arxius sense límit de mida **i missatges de text/enllaços** per la mateixa connexió | 2 |
 | 🖥️ **Pantalla** | Una persona comparteix la pantalla (amb àudio de la pestanya si el navegador el dona); la resta mira. Optimitzable per a text/presentacions o vídeo/jocs | 1 + 4 |
-| 📞 **Trucada → "Entre navegadors"** | Veu en malla WebRTC, sense app ni Host | fins a 6 |
+| 📞 **Trucada** (per defecte) | Veu i càmera opcional en malla WebRTC, sense Host: panell estil Discord amb nivells de veu, volum per persona, dispositius, diagnòstic i moderació | fins a 6 |
 | 🎨 **Pissarra** | Dibuix col·laboratiu en temps real: llapis, línia, fletxa, rectangle, el·lipse, text, goma, desfer, fons clar/fosc i descàrrega PNG. Els traços van P2P (data channels en malla), no per Supabase | fins a 6 |
 
 Només es pot compartir pantalla des d'un navegador d'escriptori; als mòbils només es pot mirar. Codi:
@@ -203,3 +203,15 @@ Cada eina mostra emojis amb el seu estat: 🖥️ Windows · 🍎 Mac · 🤖 An
 | Pissarra | ✅ | ✅ | ✅ | ✅ | — |
 
 Aquesta taula es basa en el suport de les APIs de cada navegador; revisa-la amb els teus dispositius reals.
+
+## 📞 Trucada unificada (veu + càmera, web i app)
+
+Un sol motor (`src/lib/roomVoice.ts`) per a navegadors i app d'escriptori; es poden barrejar a la mateixa paraula.
+- **Referències visuals:** nivell del teu micro, anell verd quan algú parla, i per a cada persona «rebent» / «sense senyal»
+  (bytes d'àudio que arriben de debò), latència i pèrdua de paquets. Si el micro no sent res, ho diu.
+- **Panell d'ajustos:** micròfon i sortida (on el navegador ho permet), volum del micro fins al 300 %, volum de sortida fins al 200 %,
+  volum i silenci per persona, reducció de soroll / eco / guany automàtic, i «escolta't» per provar.
+- **Càmera** opcional, activable en qualsevol moment.
+- **Amfitrió 👑:** l'app d'escriptori (si n'hi ha) o, si no, qui hi és des de fa més. Pot silenciar tothom, silenciar una persona
+  (no es pot activar fins que ell la deixi) i expulsar. És cooperatiu: no hi ha servidor que ho imposi.
+- La trucada «Clàssica (amb app)» es manté de moment com a opció secundària.

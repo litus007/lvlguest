@@ -203,7 +203,7 @@ export default function App() {
   // 📁 Transfer està "ocupat" quan hi ha sala oberta: bloqueja el canvi d'eina.
   const [transferBusy, setTransferBusy] = useState(false);
   // Trucada: amb l'app d'escriptori (Host) o directament entre navegadors.
-  const [callVia, setCallVia] = useState<"app" | "web">("app");
+  const [callVia, setCallVia] = useState<"app" | "web">("web");
   // Eines que funcionen web ↔ web, sense Host.
   const isWebTool = appMode === "transfer" || appMode === "screen" || appMode === "board" || (appMode === "call" && callVia === "web");
   // 🎨 Color d'identitat de cada eina: 🎮 taronja · 🩺 cian · 📞 verd · 📁 violeta.
@@ -384,7 +384,7 @@ export default function App() {
 
   const viaSwitch = appMode === "call" && (
     <div role="radiogroup" aria-label="Com vols fer la trucada" className="flex text-xs chamfer-sm overflow-hidden border border-white/10 mb-6">
-      {([["app", "Amb l'app d'escriptori"], ["web", "Entre navegadors"]] as const).map(([v, label]) => (
+      {([["web", "Trucada (qualsevol dispositiu)"], ["app", "Clàssic (amb app)"]] as const).map(([v, label]) => (
         <button
           key={v}
           role="radio"
@@ -473,7 +473,7 @@ export default function App() {
               <div className="text-center mb-6">
                 <HeroBadge mode={appMode} />
                 <h1 className="text-4xl font-bold text-white tracking-tight">
-                  {appMode === "board" ? "Pissarra" : appMode === "screen" ? "Pantalla" : appMode === "call" ? "Trucada entre navegadors" : "Transfer"}
+                  {appMode === "board" ? "Pissarra" : appMode === "screen" ? "Pantalla" : appMode === "call" ? "Trucada" : "Transfer"}
                 </h1>
                 <p className="text-gray-400 text-sm mt-2">
                   {appMode === "board"
@@ -481,7 +481,7 @@ export default function App() {
                     : appMode === "screen"
                     ? "Comparteix la teva pantalla amb altres persones des del navegador, sense instal·lar res. Una persona comparteix i fins a 4 miren, tots amb la mateixa paraula."
                     : appMode === "call"
-                    ? "Parla amb fins a 6 persones directament des del navegador: sense app ni Host. Tothom escriu la mateixa paraula i ja es sent."
+                    ? "Veu (i càmera, si vols) per a fins a 6 persones, des de qualsevol dispositiu. Si algú hi és a l'app d'escriptori, fa d'amfitrió: pot moderar la trucada i l'aguanta."
                     : "Eina d'intercanvi d'arxius sense límits: P2P directe, sense pujar res a cap servidor i sense cap topall de mida. També pots enviar-vos text i enllaços."}
                 </p>
                 <CompatBadges tool={compatKey} showNotes className="mt-3 flex flex-col items-center text-center" />

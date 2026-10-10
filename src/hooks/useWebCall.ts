@@ -1,15 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RoomVoice, initialVoiceState, type VoiceState } from "../lib/roomVoice";
+import { RoomVoice, initialVoiceState, type VoiceSettings, type VoiceState } from "../lib/roomVoice";
 import { normalizeCode, MIN_CODE_LENGTH } from "../lib/transferLink";
 
 export const WEB_CALL_MAX = 6;
 
-/** Trucada de veu entre navegadors (malla WebRTC, fins a 6 persones). */
+export interface CallActions {
+  toggleMute: () => void;
+  toggleDeafen: () => void;
+  toggleCamera: () => void;
+  updateSettings: (p: Partial<VoiceSettings>) => void;
+  setMemberVolume: (id: string, v: number) => void;
+  setMemberLocalMuted: (id: string, m: boolean) => void;
+  hostMute: (id: string, on: boolean) => void;
+  hostMuteAll: (on: boolean) => void;
+  hostKick: (id: string) => void;
+}
+
+/** Trucada entre dispositius (malla WebRTC, fins a 6 persones): veu, càmera opcional i moderació. */
 export function useWebCall() {
   const ref = useRef<RoomVoice | null>(null);
   const [state, setState] = useState<VoiceState>(initialVoiceState);
   const [code, setCode] = useState("");
   const idRef = useRef(typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   /** Cal cridar-ho des d'un clic (permís del micròfon i àudio). */
   const join = useCallback(async (rawCode: string, nickname: string): Promise<string | null> => {
@@ -31,7 +45,18 @@ export function useWebCall() {
     setCode("");
   }, []);
 
-  const toggleMute = useCallback(() => ref.current?.setMuted(!state.muted), [state.muted]);
+  const actions: CallActions = {
+    toggleMute: useCallback(() => ref.current?.setMuted(!stateRef.current.muted), []),
+    toggleDeafen: useCallback(() => ref.current?.setDeafened(!stateRef.current.deafened), []),
+    toggleCamera: useCallback(() => void ref.current?.setCamera(!stateRef.current.camera), []),
+    updateSettings: useCallback((p: Partial<VoiceSettings>) => void ref.current?.updateSettings(p), []),
+    setMemberVolume: useCallback((id: string, v: number) => ref.current?.setMemberVolume(id, v), []),
+    setMemberLocalMuted: useCallback((id: string, m: boolean) => ref.current?.setMemberLocalMuted(id, m), []),
+    hostMute: useCallback((id: string, on: boolean) => ref.current?.hostMute(id, on), []),
+    hostMuteAll: useCallback((on: boolean) => ref.current?.hostMuteAll(on), []),
+    hostKick: useCallback((id: string) => ref.current?.hostKick(id), []),
+  };
+  const toggleMute = actions.toggleMute;
 
   useEffect(
     () => () => {
@@ -41,5 +66,5 @@ export function useWebCall() {
     []
   );
 
-  return { state, code, join, leave, toggleMute };
+  return { state, code, join, leave, toggleMute, actions };
 }

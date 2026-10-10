@@ -53,7 +53,7 @@ export const COMPAT: Record<CompatTool, Entry> = {
   },
   callweb: {
     support: { win: "yes", mac: "yes", android: "yes", ios: "yes" },
-    notes: { ios: "Safari: cal tocar la pantalla per activar el so." },
+    notes: { ios: "Safari: cal tocar la pantalla per activar el so.", android: "El volum de la trucada s'ajusta amb els botons de volum del telèfon." },
   },
   transfer: {
     support: { win: "yes", mac: "yes", android: "partial", ios: "partial" },
